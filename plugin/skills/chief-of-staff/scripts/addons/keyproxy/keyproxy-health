@@ -1,0 +1,16 @@
+#!/usr/bin/env bash
+# keyproxy-health — is the local key proxy up, and which routes does it hold (names only)?
+# Usage: keyproxy-health [port]     port default: $KEYPROXY_PORT, else $COS_VAULT_PORT, else 8787
+# Exit 0 = ok, 2 = unreachable or not ok. Never prints a secret (the proxy never returns one).
+set -uo pipefail
+PORT="${1:-${KEYPROXY_PORT:-${COS_VAULT_PORT:-8787}}}"
+case "$PORT" in *[!0-9]*|'') echo "keyproxy-health: bad port '$PORT'" >&2; exit 2 ;; esac
+body=$(curl -q -s -m 3 "http://127.0.0.1:${PORT}/_health" 2>/dev/null) || body=""
+if ! printf '%s' "$body" | grep -q '"ok": *true'; then
+  echo "keyproxy: DOWN on 127.0.0.1:${PORT} (not installed, or not running — see the add-on doc)"
+  exit 2
+fi
+names=$(printf '%s' "$body" | sed -n 's/.*"routes": *\[\([^]]*\)\].*/\1/p' | tr -d '" ' | tr ',' ' ')
+n=0; for _ in $names; do n=$((n+1)); done
+echo "keyproxy: ok on 127.0.0.1:${PORT} — ${n} route(s): ${names:-none}"
+exit 0

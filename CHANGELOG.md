@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.5.0 — 2026-10-07
+Bundled key proxy add-on: agents USE API keys through a loopback proxy and never READ them.
+- `chief-of-staff/scripts/addons/keyproxy/`: `keyproxy.py` (stdlib daemon on 127.0.0.1; bearer / header / basic / query auth; strips caller credentials; no SSRF, no redirects followed; rejects browsers and bad Host headers; redacts the secret from replies; audit log without headers, queries or bodies), `keyproxy-set.py` (add/rotate from a hidden prompt, stdin or the macOS clipboard), `keyproxy-health`, `install.sh` (the user runs it with sudo; macOS LaunchDaemon or hardened systemd unit under a dedicated service user; `--uninstall [--purge]`), `test_keyproxy.py`.
+- `references/addons/keyproxy.md` (new) and `secrets.md` *How a session gets a key* now point at the bundled proxy.
+- `init` offers the proxy and prints the sudo install command for the user; `doctor.sh` reports its health when `COS_VAULT_PORT` is set; `config.example.env` notes `COS_VAULT_PORT=8787`.
+
 ## 0.4.0 — 2026-10-07
 Removed the `make-plan`, `do` and `babysit` skills.
 - `agent-updater`: new section *No hosts, no secrets, genericize on the way in* (placeholder table, scan before inserting, grep after editing, rotate anything already committed).

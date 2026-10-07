@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # doctor.sh — read-only health check of an agent-ops setup.
 # Usage: doctor.sh            (config from ${AGENT_OPS_CONFIG:-$HOME/.claude/agent-ops/config.env})
-# Prints a PASS/WARN/FAIL table. Exit 1 on any FAIL. No network, no writes, never prints secret values.
+# Prints a PASS/WARN/FAIL table. Exit 1 on any FAIL. No network (loopback only), no writes, never prints secret values.
 set -u
 
 CONFIG="${AGENT_OPS_CONFIG:-$HOME/.claude/agent-ops/config.env}"
@@ -144,6 +144,14 @@ case "${COS_DEFAULT_ACCOUNT:-a}" in
   auto) [ -f "${COS_ACCOUNTS:-${COS_DIR:-}/accounts.md}" ] && row PASS "addon multi-account" "auto, accounts file present" || row WARN "addon multi-account" "auto, no accounts file yet — add logins with account-add.sh";;
   *) row PASS "addon multi-account" "off (account ${COS_DEFAULT_ACCOUNT:-a})";;
 esac
+if [ -n "${COS_VAULT_PORT:-}" ]; then   # loopback-only check; the proxy returns route names, never secrets
+  case "$COS_VAULT_PORT" in *[!0-9]*) row FAIL "addon keyproxy" "COS_VAULT_PORT must be a port number";;
+  *) kp=$(bash "$HERE/addons/keyproxy/keyproxy-health" "$COS_VAULT_PORT" 2>/dev/null)
+     if [ $? -eq 0 ]; then row PASS "addon keyproxy" "${kp#keyproxy: }"
+     else row WARN "addon keyproxy" "nothing healthy on 127.0.0.1:$COS_VAULT_PORT — needs: [vault] tasks wait; install: sudo bash $HERE/addons/keyproxy/install.sh"; fi;;
+  esac
+else row PASS "addon keyproxy" "off"; fi
+
 [ "${COS_ADHD_MODE:-0}" = 1 ] && row PASS "addon adhd mode" "on" || row PASS "addon adhd mode" "off"
 
 # ---- report ----

@@ -55,7 +55,7 @@ Session files go to `.agent-ops.json` `sessionsDir` → `COS_SESSIONS_DIR` → `
 | tmux or wt launcher (print = manual fallback) | remote job runner for heavy commands |
 | `doctor.sh` health check | multiple Claude accounts, load-balanced |
 | session-start / update / end, from-transcript, recap, analysis | ADHD / focus mode |
-| plugin-authoring, agent-updater, version-bump | |
+| plugin-authoring, agent-updater, version-bump | key proxy: agents use API keys, never read them (`COS_VAULT_PORT`) |
 
 An add-on with no config prints `addon <name> not configured, skipping` and exits cleanly. Core never needs an add-on.
 

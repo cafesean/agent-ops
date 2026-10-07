@@ -38,6 +38,7 @@ OS from `uname -s`: `Darwin` = mac, `Linux` = linux (plus `WSL` line = WSL2), `M
    - Multi-account: `auto` (load-balance logins added later with `account-add.sh`) vs `a` (default login only) (`COS_DEFAULT_ACCOUNT`).
    - Ship tracking (`COS_SHIPPED`, see `references/orchestration.md`): when on, a DONE that moved code also needs a `shipped:` line.
    - Require reference updates at DONE (`COS_REQUIRE_REFS=1`): workers must report `refs:` (docs updated, or "none").
+   - Key proxy (agents use API keys without reading them; macOS/Linux): explain "a loopback proxy adds each key; its store belongs to a separate service user". Never run `sudo` yourself. On yes, print for the USER to run in their own terminal: `sudo bash ${CLAUDE_PLUGIN_ROOT}/skills/chief-of-staff/scripts/addons/keyproxy/install.sh`, then set `COS_VAULT_PORT=8787`. Keys are added later by the user with `keyproxy-set.py` (see [keyproxy](../chief-of-staff/references/addons/keyproxy.md)); never ask for a key value.
    - Focus-aware mode (`COS_ADHD_MODE=1`, see [focus-aware mode](../chief-of-staff/references/addons/adhd.md)): one-screen answers, ONE Thing first, drift nudges.
 
 ## Step 3 — Write config
