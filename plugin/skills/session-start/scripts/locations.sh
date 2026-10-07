@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # locations.sh — resolve where session files and specs live for the current repo.
 # Prints shell assignments, so callers do:  eval "$(bash locations.sh [repo-dir])"
-#   SESSIONS_DIR=<abs>   SPECS_DIR=<abs>   CURRENT_SESSION=<abs>/.current-session   LOC_SOURCE=<which rule won>
+#   SESSIONS_DIR=<abs>   SPECS_DIR=<abs>   MEMORY_DIR=<abs or empty>   CURRENT_SESSION=<abs>/.current-session   LOC_SOURCE=<which rule won>
 # Order (first hit wins, per key):
-#   1. <repo>/.agent-ops.json        keys "sessionsDir", "specsDir" (relative = relative to repo root)
-#   2. agent-ops config               COS_SESSIONS_DIR, COS_SPECS_DIR ($AGENT_OPS_CONFIG or ~/.claude/agent-ops/config.env)
-#   3. defaults                       <repo>/sessions, <repo>/specs
+#   1. <repo>/.agent-ops.json        keys "sessionsDir", "specsDir", "memoryDir" (relative = relative to repo root)
+#   2. agent-ops config               COS_SESSIONS_DIR, COS_SPECS_DIR, COS_MEMORY_DIR ($AGENT_OPS_CONFIG or ~/.claude/agent-ops/config.env)
+#   3. defaults                       <repo>/sessions (or an existing _ai/sessions), <repo>/specs (or an existing _context); no memory default
 # Read-only: never creates directories or writes config. No network.
 set -u
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -18,7 +18,7 @@ start="${1:-$PWD}"
 root="$(cd "$start" 2>/dev/null && git rev-parse --show-toplevel 2>/dev/null || (cd "$start" 2>/dev/null && pwd) || printf '%s' "$start")"
 root="$(cos_path "$root")"
 
-sess=""; spec=""; src_s="default"; src_p="default"
+sess=""; spec=""; mem=""; src_s="default"; src_p="default"
 
 # 1. per-project .agent-ops.json (parsed with COS_PYTHON when available; sed fallback for flat JSON)
 pj="$root/.agent-ops.json"
@@ -39,6 +39,7 @@ print(v if isinstance(v, str) else "")' "$pj" "$1" 2>/dev/null | tr -d '\r')"
   }
   s="$(get_key sessionsDir)"; [ -n "$s" ] && { sess="$s"; src_s=".agent-ops.json"; }
   p="$(get_key specsDir)";    [ -n "$p" ] && { spec="$p"; src_p=".agent-ops.json"; }
+  m="$(get_key memoryDir)";   [ -n "$m" ] && mem="$m"
 fi
 
 # 2. agent-ops config (only the two keys are read; the file is not sourced)
@@ -47,6 +48,7 @@ if [ -f "$cfg" ]; then
   cfg_val() { sed -n "s/^[[:space:]]*\(export[[:space:]]\{1,\}\)\{0,1\}$1=//p" "$cfg" | tail -1 | tr -d '\r' | sed "s/^[\"']//; s/[\"']\$//"; }
   [ -z "$sess" ] && { v="$(cfg_val COS_SESSIONS_DIR)"; [ -n "$v" ] && { sess="$v"; src_s="config"; }; }
   [ -z "$spec" ] && { v="$(cfg_val COS_SPECS_DIR)";    [ -n "$v" ] && { spec="$v"; src_p="config"; }; }
+  [ -z "$mem" ] && mem="$(cfg_val COS_MEMORY_DIR)"
 fi
 
 # 3. defaults: an existing `_ai/sessions` wins, an existing `_context` wins when specs/ is absent; else <repo>/sessions, <repo>/specs
@@ -70,11 +72,12 @@ absify() {  # ~ expansion, Windows → POSIX, relative → under repo root
   esac
   printf '%s' "${p%/}"
 }
-sess="$(absify "$sess")"; spec="$(absify "$spec")"
+sess="$(absify "$sess")"; spec="$(absify "$spec")"; [ -n "$mem" ] && mem="$(absify "$mem")"
 
 q() { printf "'%s'" "$(printf '%s' "$1" | sed "s/'/'\\\\''/g")"; }
 echo "REPO_ROOT=$(q "$root")"
 echo "SESSIONS_DIR=$(q "$sess")"
 echo "SPECS_DIR=$(q "$spec")"
+echo "MEMORY_DIR=$(q "$mem")"   # empty when no memory folder is configured
 echo "CURRENT_SESSION=$(q "$sess/.current-session")"
 echo "LOC_SOURCE=$(q "sessions:$src_s specs:$src_p")"

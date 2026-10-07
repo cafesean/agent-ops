@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.7.0 — 2026-10-07
+`init` now sets the per-repo session, specs and memory folders (writes `.agent-ops.json`) and shows the result of `locations.sh`. New optional `memoryDir` / `COS_MEMORY_DIR`; `locations.sh` prints `MEMORY_DIR` (empty when unset) and `recall` searches it. Replaces claude-mem-pro's `init` path setup.
+
 ## 0.6.0 — 2026-10-07
 New skill `recall`: librarian over session files, specs, CLAUDE.md and memory notes (paths from `locations.sh`); points to the artifact and section, never writes.
 

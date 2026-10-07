@@ -12,14 +12,14 @@ section inside it, then read only that section.
 
 ```bash
 eval "$(bash "${CLAUDE_PLUGIN_ROOT}/skills/session-start/scripts/locations.sh")"
-echo "$REPO_ROOT | $SESSIONS_DIR | $SPECS_DIR | $LOC_SOURCE"
+echo "$REPO_ROOT | $SESSIONS_DIR | $SPECS_DIR | $MEMORY_DIR | $LOC_SOURCE"
 ```
 
-Order: `.agent-ops.json` → `COS_SESSIONS_DIR` / `COS_SPECS_DIR` in the agent-ops config →
-an existing `_ai/sessions` / `_context` → `./sessions`, `./specs`. Details:
+Order: `.agent-ops.json` (`sessionsDir`, `specsDir`, `memoryDir`) → `COS_*_DIR` in the agent-ops
+config → an existing `_ai/sessions` / `_context` → `./sessions`, `./specs`. Details:
 [locations](../session-start/references/locations.md). If `$SESSIONS_DIR` does not exist,
-say so and search the conventional places as a best effort. The memory folder is not
-resolved by agent-ops: use the one the user names, or look for a `MEMORY.md` index.
+say so and search the conventional places as a best effort. `$MEMORY_DIR` is the memory
+notes folder; empty means none is configured: skip that source, or use the folder the user names.
 
 ## First: a domain question goes to the domain skill
 
@@ -49,7 +49,7 @@ Use code search only to confirm a pointer an artifact gave you.
 
 1. **Identify intent and topic.** Turn the question into keywords and, if known, a topic tag.
 2. **Scan, ranked by authority then recency.**
-   `rg -l "<keywords>" "$SESSIONS_DIR" "$SPECS_DIR" "$REPO_ROOT/CLAUDE.md"` (plus the memory folder).
+   `rg -l "<keywords>" "$SESSIONS_DIR" "$SPECS_DIR" "$REPO_ROOT/CLAUDE.md" "$MEMORY_DIR"` (drop `$MEMORY_DIR` when empty).
    Session files are date-prefixed (`YYYY-MM-DD-[tag]-desc.md`); prefer recent ones.
    Frontmatter `topics:` and `tags:` are a strong signal.
 3. **Open the matching section, not the whole file.** Jump to the `##` heading that fits:

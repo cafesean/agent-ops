@@ -1,7 +1,7 @@
 {
   "name": "agent-ops",
   "description": "Agent orchestration and workflow optimization — chief of staff (triage, goals, worker sessions, sweep), session logging, plugin tooling, and a guided init that sets up the whole configuration.",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "author": { "name": "Sean Liao" },
   "keywords": ["agent-orchestration", "chief-of-staff", "workers", "sessions", "goals", "triage", "sweep"]
 }
