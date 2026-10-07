@@ -14,6 +14,7 @@ Includes the session-logging family and plugin tooling.
 | | `/agent-ops:session-end` | close the session with a summary, drop it from the active tracker |
 | | `/agent-ops:session-from-transcript` | rebuild a session file (with Resume Here) from a raw `.jsonl` transcript |
 | | `/agent-ops:recap-session` | quick printed recap of a past session |
+| | `/agent-ops:recall` | find what was decided or learned in past work: points to the session, spec or CLAUDE.md section |
 | | `/agent-ops:session-analysis` | mine session files for patterns and lessons to fold back into skills |
 | Plugin tooling | `/agent-ops:plugin-authoring` | write agents/skills/hooks that trigger well; `check-plugin.sh` lints a plugin |
 | | `agent-ops:agent-updater` (agent) | fold session lessons into SKILL.md / agent files in your plugin source repos (`COS_PLUGIN_REPOS`) |

@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.6.0 — 2026-10-07
+New skill `recall`: librarian over session files, specs, CLAUDE.md and memory notes (paths from `locations.sh`); points to the artifact and section, never writes.
+
 ## 0.5.2 — 2026-10-07
 Session paths: reuse an existing `_ai/sessions` / `_context` layout before falling back to `./sessions` / `./specs`. `MIGRATION.md` no longer claims claude-mem-pro paths are read (they were not).
 
