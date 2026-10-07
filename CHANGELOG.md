@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.4.0 — 2026-10-07
+Removed the `make-plan`, `do` and `babysit` skills.
+- `agent-updater`: new section *No hosts, no secrets, genericize on the way in* (placeholder table, scan before inserting, grep after editing, rotate anything already committed).
+- `plugin-authoring`: new `references/no-secrets.md` with the same table and grep.
+
+## 0.3.2 — 2026-10-07
+Docs: launchers and talking to workers.
+- README: new *Do I need tmux?* (tmux / cmux / wt start workers by themselves; `print` is a manual fallback) with install lines, and *Talking to a worker*. FAQ "Does it work without cmux?" rewritten.
+- `init`: explains what each launcher does before asking; recommends installing tmux when no tmux / cmux / wt is found.
+- `chief-of-staff` SKILL.md + `references/comms.md`: *Working with workers directly* (workers are interactive; the task file stays the record; closing a window kills its worker).
+- `spawn.sh`: the default worker prompt tells a worker to follow direct direction from the owner and add a one-line note under `## Reports`.
+- `doctor.sh`: `COS_LAUNCHER=print` (or unset with no tmux / wt) is now a WARN: workers will not start by themselves.
+
 ## 0.3.1 — 2026-10-07
 First public release.
 

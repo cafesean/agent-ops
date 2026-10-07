@@ -22,7 +22,7 @@ resource ids, tokens (not even a prefix), emails, phone numbers or personal chec
 placeholder (`<host-ip>`, `<user>`, `<repo-root>`, `<token>`) plus a pointer to where the real value lives
 (an inventory file, a secrets vault, an env var name). A secret that reached a commit is compromised: tell the
 user to rotate it, then scrub. Never silently delete. Before committing, grep touched files for IPv4 literals,
-`@` addresses and long high-entropy strings.
+`@` addresses and long high-entropy strings. Placeholder table and grep: read `references/no-secrets.md`.
 
 ## Agents (`agents/<name>.md`)
 - Frontmatter: `name` (kebab-case, equals the file name), `description`, optional `model` (`opus` / `sonnet` /

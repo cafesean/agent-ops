@@ -21,6 +21,12 @@
 
 **User in a pane**: an ask the user answers in a worker's pane is acted on by that worker directly; the chief closes the ask at the next sweep. Never answer the same ask in both places.
 
+## Working with workers directly
+- Workers are ordinary interactive Claude Code sessions. The user can click into any worker's window and talk to it at any time: answer a question, change direction, review its work.
+- Find one: tmux `tmux attach -t ${COS_TMUX_SESSION:-agent-ops}` (plus `-L`/`-S` when `COS_TMUX_SOCKET` is set), window = worker name; cmux = a pane in the chief's workspace; wt = a tab titled with the worker name.
+- The worker prompt says: when the owner gives new direction directly, follow it and add a one-line note under `## Reports`. The task file stays the record; the chief reads it, never the pane.
+- Closing a worker's window or pane kills that worker. `stop.sh` ends one cleanly (kills the pid, closes its tmux window or cmux pane; a wt tab stays open).
+
 ## Per machine — each writes only its own
 - Each machine has a prefix (`COS_MACHINE_PREFIX`, one or two letters). One machine may be the host (`COS_HOST_PREFIX`).
 - A machine spawns, stops and plans ONLY its own prefix's tasks (`spawn.sh` refuses a foreign prefix, `stop.sh` exit 6), writes only its own `<!-- cos:next:<prefix> -->` block, and only its own `- <prefix>:` line under STATE.md → *Last verified*.
@@ -29,7 +35,7 @@
 - Sharing `$COS_DIR` between machines is up to you (a synced folder, a git repo). Dot files (`.heartbeat/`, alert state) stay per machine.
 
 ## Panes
-With `COS_LAUNCHER=tmux`, workers open as windows in a tmux session; with `cmux` (add-on), as panes in the chief's workspace, side by side; with `print`, spawn.sh prints the command and the user starts it.
+With `COS_LAUNCHER=tmux`, workers open as windows in tmux session `${COS_TMUX_SESSION:-agent-ops}`, each named after the worker; with `cmux` (add-on), as panes in the chief's workspace, side by side; with `wt`, as Windows Terminal tabs titled with the worker name. `print` is a manual fallback: spawn.sh only prints the command and the user pastes it into a terminal; the sweep and the queue cannot start anything.
 - **cmux:** spawn.sh picks the split before the pane exists; every create/close re-equalizes via `scripts/addons/lib/cmux-equalize.sh` (the `workspace.equalize_splits` RPC). Never move a live pane: it wipes scrollback. Closing a workspace kills every worker in it, so after each spawn say which workspace the worker is in. Optional per-category pane colours: `scripts/addons/lib/pane-color.sh`.
 - **Typing into a pane (fallback):** put the full instruction in the task file first; the pane gets one short pointer line. Send the text, then submit as a separate key press, then read the bottom of the screen to prove the input line is empty. A newline inside the text only adds a line, it does not submit. Never append to a pane whose input box already holds the user's draft.
 

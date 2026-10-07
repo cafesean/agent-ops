@@ -7,9 +7,6 @@ If you used claude-mem-pro, these commands and skills now also exist here as `/a
 | `/claude-mem-pro:session-start` | `/agent-ops:session-start` |
 | `/claude-mem-pro:session-update` | `/agent-ops:session-update` |
 | `/claude-mem-pro:session-end` | `/agent-ops:session-end` |
-| `/claude-mem-pro:make-plan` | `/agent-ops:make-plan` |
-| `/claude-mem-pro:do` | `/agent-ops:do` |
-| `/claude-mem-pro:babysit` | `/agent-ops:babysit` |
 | `/claude-mem-pro:version-bump` | `/agent-ops:version-bump` |
 
 Session files keep the same format (frontmatter + sections), so existing files keep working.

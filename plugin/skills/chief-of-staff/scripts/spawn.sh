@@ -456,7 +456,7 @@ if [ "$REMOTE" = 0 ]; then
   fi
   # Resume: no first prompt — the session already has it; same flags otherwise (cache = model+effort+flags+account).
   LAST_ARGS="--resume $RESUME"
-  [ -n "$RESUME" ] || PROMPT="$STYLE_PROMPT ${EXTRA_PROMPT}You are a worker session spawned by the chief of staff. ${CONT_PROMPT}Your task file: $DEST_CHARTER_SAFE — its body is your charter; do it. Report ONLY by appending lines under \`## Reports\` at the end of that same file (format in the charter → Report protocol). Plain text in this terminal never reaches the chief. $GOAL_PROMPT $ASK_PROMPT $TEARDOWN_PROMPT $TAIL_PROMPT"
+  [ -n "$RESUME" ] || PROMPT="$STYLE_PROMPT ${EXTRA_PROMPT}You are a worker session spawned by the chief of staff. ${CONT_PROMPT}Your task file: $DEST_CHARTER_SAFE — its body is your charter; do it. Report ONLY by appending lines under \`## Reports\` at the end of that same file (format in the charter → Report protocol). Plain text in this terminal never reaches the chief. When the owner gives you new direction directly in this terminal, follow it and add a one-line note under \`## Reports\` so the chief sees it. $GOAL_PROMPT $ASK_PROMPT $TEARDOWN_PROMPT $TAIL_PROMPT"
   [ -n "$RESUME" ] || LAST_ARGS=$(printf '%q' "$PROMPT")
   RC_FLAG=; [ "${COS_REMOTE_CONTROL:-0}" = 1 ] && [ "$ACCT" = a ] && RC_FLAG="--remote-control "
   ACCT_LINES="# account a: the default Claude login"

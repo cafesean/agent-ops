@@ -20,12 +20,12 @@ for t in claude git tmux cmux wt.exe hermes jq python3 python py cygpath; do pri
 ls -d "$HOME"/Documents/*/.obsidian "$HOME"/*/.obsidian "$HOME"/Obsidian/*/.obsidian 2>/dev/null | sed 's#/.obsidian##'
 [ -f "$CONFIG" ] && echo "existing config: $CONFIG"
 ```
-Report one table `tool | found | used for`. `claude` + `git` missing → stop and say how to install. Existing config → load its values as the defaults for every question below ("update mode").
+Report one table `tool | found | used for`; mark `tmux`, `cmux` and `wt.exe` as "needed for hands-off workers". `claude` + `git` missing → stop and say how to install. Existing config → load its values as the defaults for every question below ("update mode").
 OS from `uname -s`: `Darwin` = mac, `Linux` = linux (plus `WSL` line = WSL2), `MINGW*`/`MSYS*`/`CYGWIN*` = Windows Git Bash. No python 3 at all (python3, python or `py -3`) → stop and say how to install. On Windows Git Bash say once: "Windows is untested — WSL2 is recommended; report issues." and write every path as `/c/Users/<you>/…` (never `C:\…`; colon lists break on drive letters). On WSL paths are `/home/…` or `/mnt/c/…`.
 
 ## Step 2 — Ask (one at a time)
 1. **State dir** — default `~/agent-ops/state`; if a vault was found, offer `<vault>/agent-ops` as an alternative (state is plain markdown, syncs with the vault).
-2. **Launcher** — `tmux` | `cmux` | `wt` | `print`. Default: mac/linux/WSL → `cmux` if found (mac only), else `tmux` if found, else `print`; Windows Git Bash → `wt` (Windows Terminal tab) if `wt.exe` found, else `print` (prints the exact `claude` command for you to run). Never offer `cmux` off macOS.
+2. **Launcher** — `tmux` | `cmux` | `wt` | `print`. Explain first, in plain words: "`tmux`, `cmux` (macOS) and `wt` (Windows Terminal) open each worker in its own window or pane, so the chief and the queue start workers by themselves, and you can click in and talk to any worker. `print` is manual: it only prints the `claude` command and you paste each one into a terminal yourself; the sweep and the queue cannot start anything." Default: mac/linux/WSL → `cmux` if found (mac only), else `tmux` if found, else `print`; Windows Git Bash → `wt` if `wt.exe` found, else `print`. Never offer `cmux` off macOS. None of tmux/cmux/wt found → recommend installing tmux with the command for the detected OS (mac `brew install tmux`; Linux/WSL `sudo apt install tmux`; Git Bash: install Windows Terminal and use `wt`), say `print` means no hands-off workers, then ask the one launcher question.
 3. **Launch dirs** — colon list of repo roots workers may start in. Default: the current working dir. Each must exist.
 4. **Machine prefix** — one lowercase letter for this machine (worker names start `<letter>-`). Default `m`.
 5. **Max local sessions** — live top-level `claude` sessions before new work queues. Default `4`.

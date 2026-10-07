@@ -80,7 +80,7 @@ need_bin claude FAIL "install Claude Code"
 need_bin git FAIL "install git"
 if cos_python -c 'import sys; sys.exit(sys.version_info[0] < 3)' >/dev/null 2>&1; then row PASS "python" "$COS_PYTHON ($(cos_python -c 'import platform; print(platform.python_version())' 2>/dev/null))"
 else row FAIL "python" "no python 3 (tried python3, python, py -3) — task files are parsed by scripts/lib/tasks.py; or set COS_PYTHON"; fi
-need_bin jq WARN "some scripts and babysit use it"
+need_bin jq WARN "some scripts use it"
 [ -f "$HERE/spawn.sh" ] && row PASS "plugin scripts" "$HERE" || row FAIL "plugin scripts" "spawn.sh not next to doctor.sh"
 
 # ---- launcher ----
@@ -88,10 +88,10 @@ case "${COS_LAUNCHER:-}" in
   tmux) need_bin tmux FAIL "COS_LAUNCHER=tmux — install it or set print";;
   cmux) if [ "$COS_OS" = mac ]; then need_bin cmux FAIL "COS_LAUNCHER=cmux — install it or set print"; else row FAIL "launcher" "cmux is macOS only — set tmux, wt or print"; fi;;
   wt) if wtb=$(cos_wt_bin); then row PASS "launcher" "wt (Windows Terminal: $wtb)"; else row FAIL "launcher" "COS_LAUNCHER=wt but wt.exe not found — install Windows Terminal or set print"; fi;;
-  print) row PASS "launcher" "print (spawn.sh prints the claude command)";;
+  print) row WARN "launcher" "print launcher: workers will not start by themselves; install tmux (or use wt/cmux)";;
   "") if have tmux; then row WARN "launcher" "COS_LAUNCHER unset — tmux will be used"
       elif cos_wt_bin >/dev/null 2>&1; then row WARN "launcher" "COS_LAUNCHER unset — wt (Windows Terminal) will be used"
-      else row WARN "launcher" "COS_LAUNCHER unset — print will be used"; fi;;
+      else row WARN "launcher" "COS_LAUNCHER unset — print will be used: workers will not start by themselves; install tmux (or use wt/cmux)"; fi;;
   *) row FAIL "launcher" "COS_LAUNCHER=$COS_LAUNCHER — must be tmux|cmux|wt|print";;
 esac
 

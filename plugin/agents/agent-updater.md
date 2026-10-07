@@ -65,11 +65,29 @@ Rules and fallbacks: `${CLAUDE_PLUGIN_ROOT}/skills/session-start/references/loca
    ```
 6. **Apply** in the canonical repo only: preserve existing structure; add new sections; move detail to
    `references/` when a SKILL.md grows past ~500 lines; keep rule zero (no hosts, ids, secrets or personal
-   paths: placeholders and pointers only).
+   paths: placeholders and pointers only; see *No hosts, no secrets, genericize on the way in* below).
 7. **Verify**: run `bash "${CLAUDE_PLUGIN_ROOT}/skills/plugin-authoring/scripts/check-plugin.sh" <plugin-root>`
    for each touched plugin and fix every FAIL; re-read the session sources against the edits.
 8. **Version**: bump each touched plugin with `agent-ops:version-bump` (patch for edits, minor for new
    skills/agents). Commit only when the user asks, and never push unasked.
+
+## No hosts, no secrets, genericize on the way in
+Plugin repos may be public and git history is permanent. Session files are full of real values; strip them
+before anything lands in a plugin file.
+
+| Never write into a plugin file | Write instead | Where the real value belongs |
+|---|---|---|
+| IPs, hostnames, domains | `<host>`, `<host-ip>`, `<app-domain>` | the user's host inventory |
+| SSH users, key file names | `<user>`, `<ssh-key>` | the user's SSH config / inventory |
+| cloud account / project / org ids | `<account-id>`, `<project-id>`, `<org-id>` | the user's inventory or env vars |
+| tokens, API keys, passwords (even truncated prefixes) | `<token>`, `<api-key>`, an env var name | the user's own secret store |
+| personal emails, phones | `<email>`, `<phone>` | the user's own notes |
+| local checkout paths | `<repo-root>`, `${CLAUDE_PLUGIN_ROOT}` | the user's config |
+
+- **Before inserting**: scan the text for the left column and replace each hit with a placeholder plus a pointer.
+- **After editing**: grep each edited file for IPv4 literals, `@` addresses and long high-entropy strings.
+- **Already committed**: the secret is compromised. Tell the user to rotate it; never quietly delete it.
+- Same table and the grep command: `${CLAUDE_PLUGIN_ROOT}/skills/plugin-authoring/references/no-secrets.md`.
 
 ## Workflow: create a new plugin
 1. Identify the domain, the sessions that cover it, and the agents/skills it needs.

@@ -28,7 +28,7 @@ user ──asks / answers──▶ chief session (one per machine, sweeps on a s
   │                    tasks/<name>.md     status open · to: <prefix> · charter
   │                         │ queue-run.sh claims by rename → spawn.sh
   │                         ▼
-  │                    worker sessions (tmux / cmux pane, or a printed command)
+  │                    worker sessions (tmux window / cmux pane / wt tab)
   │                         │ report lines + asks → back into the same task file
   │                         ▼
   └──── Outstanding.md ◀── next.sh (this machine's cos:next block) + outstanding.sh
@@ -45,7 +45,7 @@ Scripts run as `${CLAUDE_PLUGIN_ROOT}/skills/chief-of-staff/scripts/<name>.sh` (
 |---|---|
 | `load-check.sh` | Verdict `LOCAL` / `LOCAL_LIGHT` / `OFFLOAD` + numbers; kills orphaned build workers |
 | `sessions.sh` | Live Claude sessions: name, pid, age, idle min. `--tsv` = the machine-readable form scripts must read |
-| `spawn.sh` | Start a worker from `--task-file tasks/<name>.md`. Gates: task goal + parent, launch dir, load, own prefix. `--continues`, `--resume`, `--agent`, `--dry-run`. Launcher per `COS_LAUNCHER` (`tmux`, `cmux`, or `print` = prints the exact `claude` command) |
+| `spawn.sh` | Start a worker from `--task-file tasks/<name>.md`. Gates: task goal + parent, launch dir, load, own prefix. `--continues`, `--resume`, `--agent`, `--dry-run`. Launcher per `COS_LAUNCHER` (`tmux`, `cmux`, `wt`; `print` = manual fallback, only prints the `claude` command) |
 | `queue-run.sh` | The queue: spawns `status: open` tasks addressed to this machine; refuses `approved: false` |
 | `next.sh` | Plan daemon (no LLM): runs `queue-run.sh`, writes this machine's `<!-- cos:next:<prefix> -->` block of Outstanding.md (Needs you · Queue · Stale state · workers). `--alert` = only new blocked/died/asks |
 | `checkin.sh` | Pings `⟦CK⟧` to live workers silent > 30 min and idle ≤ 1 h |
@@ -182,6 +182,13 @@ Pick per dispatch and always pass `model` explicitly. Use whatever model names y
 | Concurrency, auth, security, cross-service state, final whole-branch review | strongest available model |
 
 Research that must also judge ("is this safe to ship") goes to the strongest model.
+
+## Working with workers directly
+Workers are ordinary interactive Claude Code sessions. The user can click into any worker's window and talk to it at any time (answer a question, change direction, review its work).
+- Find them: tmux = `tmux attach -t ${COS_TMUX_SESSION:-agent-ops}`, one window per worker named after it; cmux = panes in the chief's workspace; wt = tabs titled with the worker name.
+- The worker prompt tells it to follow direct direction and add a one-line note under `## Reports`. The task file stays the record: read it, never the pane.
+- Closing a worker's window or pane kills that worker; use `stop.sh` to end one cleanly.
+- `COS_LAUNCHER=print` is a manual fallback: it only prints the `claude` command; the sweep and queue cannot start workers.
 
 ## Tokens and sessions — short rules
 
