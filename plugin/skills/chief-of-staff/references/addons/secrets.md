@@ -21,7 +21,7 @@ Use the bundled key proxy, `scripts/addons/keyproxy/`. Full detail: [keyproxy.md
 | Any other secret (DB URL, cloud creds) | A wrapper that puts the value into one command's env and redacts it from output | `cat`/`grep` on secrets files or `.env*`, keychain dump commands |
 | Check a key exists | By route name in `/_health`, or by length | Print it "to check" |
 
-Honest limits: loopback only, same machine. A user with sudo/root can still read the store. Any local process can spend a configured key. macOS and Linux only (WSL2 with systemd should work); untested on Windows.
+Honest limits: loopback only, same machine. A user with sudo/root can still read the store. Any local process can spend a configured key. The bundled proxy is macOS only. On Linux and Windows leave `COS_VAULT_PORT` unset and rely on the rule above: inject a value into one command's env, never read or print it.
 
 ## Add or rotate a key — the user only
 The user types secrets at a hidden prompt in their own terminal. The chief may open a pane or print the command, but never runs `sudo`. Never ask the user to paste values into chat.

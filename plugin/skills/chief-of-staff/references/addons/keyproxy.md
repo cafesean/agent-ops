@@ -6,15 +6,17 @@ A loopback HTTP proxy (stdlib Python 3, no dependencies) that holds API keys. Ag
 ```
 sudo bash <plugin>/skills/chief-of-staff/scripts/addons/keyproxy/install.sh [--port 8787]
 ```
-| | macOS | Linux (and WSL2 with systemd) |
-|---|---|---|
-| Service user | `_agentops_keyproxy` (hidden, no shell) | `agentops-keyproxy` (system, no shell) |
-| Service | LaunchDaemon `com.agent-ops.keyproxy` | `agent-ops-keyproxy.service` (NoNewPrivileges, ProtectHome, PrivateTmp, ProtectSystem=strict) |
-| Code (root-owned) | `/Library/Application Support/agent-ops-keyproxy` | `/usr/local/lib/agent-ops-keyproxy` |
-| Store | `/var/lib/agent-ops-keyproxy/store.json` (dir 700, file 600, service user) | same |
-| Audit log | `/var/log/agent-ops-keyproxy/audit.log` (readable; no secrets) | same |
+**macOS only.** On Linux and Windows `install.sh` refuses and the add-on stays off; use another secret store there (see `secrets.md`).
 
-Safe to re-run: it updates the code and restarts the service; the store's keys stay. `--uninstall` removes service and code and keeps the store; `--uninstall --purge` also deletes store, logs and service user. Windows without WSL2: not supported.
+| | macOS |
+|---|---|
+| Service user | `_agentops_keyproxy` (hidden, no shell) |
+| Service | LaunchDaemon `com.agent-ops.keyproxy` |
+| Code (root-owned) | `/Library/Application Support/agent-ops-keyproxy` |
+| Store | `/var/lib/agent-ops-keyproxy/store.json` (dir 700, file 600, service user) |
+| Audit log | `/var/log/agent-ops-keyproxy/audit.log` (readable; no secrets) |
+
+Safe to re-run: it updates the code and restarts the service; the store's keys stay. `--uninstall` removes service and code and keeps the store; `--uninstall --purge` also deletes store, logs and service user.
 
 Then set `COS_VAULT_PORT=8787` (or your `--port`) in `config.env`.
 
@@ -56,4 +58,4 @@ Any SDK with a base-URL setting works the same way. Give it a dummy key if it in
 - A user with sudo/root can still read the store. This stops agents and their scripts, not an administrator.
 - Any local process can USE a configured route. Only add keys you are happy for local tools to spend.
 - Gzip responses (an upstream ignoring `Accept-Encoding: identity`) pass through unscrubbed.
-- macOS and Linux only; untested on Windows/WSL2. The install path has not been CI-tested under sudo; the daemon and `keyproxy-set.py` are covered by `test_keyproxy.py`.
+- macOS only. The install path has not been CI-tested under sudo; the daemon and `keyproxy-set.py` are covered by `test_keyproxy.py`.

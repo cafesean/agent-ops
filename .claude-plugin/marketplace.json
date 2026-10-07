@@ -7,7 +7,7 @@
   "plugins": [
     {
       "name": "agent-ops",
-      "version": "0.5.0",
+      "version": "0.5.1",
       "source": "./plugin",
       "description": "Run Claude Code like a chief of staff: one chief session that triages, plans, dispatches worker sessions, tracks goals and reports in one place. /agent-ops:init sets up the whole configuration."
     }

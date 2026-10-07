@@ -148,7 +148,9 @@ if [ -n "${COS_VAULT_PORT:-}" ]; then   # loopback-only check; the proxy returns
   case "$COS_VAULT_PORT" in *[!0-9]*) row FAIL "addon keyproxy" "COS_VAULT_PORT must be a port number";;
   *) kp=$(bash "$HERE/addons/keyproxy/keyproxy-health" "$COS_VAULT_PORT" 2>/dev/null)
      if [ $? -eq 0 ]; then row PASS "addon keyproxy" "${kp#keyproxy: }"
-     else row WARN "addon keyproxy" "nothing healthy on 127.0.0.1:$COS_VAULT_PORT — needs: [vault] tasks wait; install: sudo bash $HERE/addons/keyproxy/install.sh"; fi;;
+     else
+       hint="start your vault"; [ "$(uname -s)" = Darwin ] && hint="install the bundled proxy: sudo bash $HERE/addons/keyproxy/install.sh"
+       row WARN "addon keyproxy" "nothing healthy on 127.0.0.1:$COS_VAULT_PORT — needs: [vault] tasks wait; $hint"; fi;;
   esac
 else row PASS "addon keyproxy" "off"; fi
 

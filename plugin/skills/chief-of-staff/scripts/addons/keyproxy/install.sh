@@ -2,13 +2,13 @@
 # install.sh — install the agent-ops key proxy. Run by the USER with sudo; agents never run it.
 #   sudo bash install.sh [--port N]            install or update (idempotent; keeps the store's keys)
 #   sudo bash install.sh --uninstall [--purge]  remove service + code; --purge also deletes store, logs, user
-# macOS: hidden user _agentops_keyproxy + LaunchDaemon com.agent-ops.keyproxy.
-# Linux: system user agentops-keyproxy + systemd unit agent-ops-keyproxy.service (hardened).
-# Windows: not supported natively; WSL2 with systemd works as Linux. Prints no secret values.
+# macOS only: hidden user _agentops_keyproxy + LaunchDaemon com.agent-ops.keyproxy. Prints no secret values.
 set -euo pipefail
 [ "$(id -u)" = 0 ] || { echo "run with sudo: sudo bash $0 $*"; exit 1; }
 export PATH=/usr/bin:/bin:/usr/sbin:/sbin    # never run a user-writable binary as root
 unset PYTHONPATH PYTHONHOME CURL_HOME XDG_CONFIG_HOME
+
+[ "$(uname -s)" = Darwin ] || { echo "key proxy install is macOS only (found $(uname -s)); skip this add-on"; exit 1; }
 
 PORT=8787 UNINSTALL=0 PURGE=0
 while [ $# -gt 0 ]; do
@@ -16,7 +16,7 @@ while [ $# -gt 0 ]; do
     --port) PORT="${2:-}"; shift 2 ;;
     --uninstall) UNINSTALL=1; shift ;;
     --purge) PURGE=1; shift ;;
-    -h|--help) sed -n '2,7p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,5p' "$0"; exit 0 ;;
     *) echo "install.sh: unknown argument $1"; exit 2 ;;
   esac
 done
@@ -26,30 +26,21 @@ SRC="$(cd "$(dirname "$0")" && pwd)"
 DATA=/var/lib/agent-ops-keyproxy
 LOGS=/var/log/agent-ops-keyproxy
 FILES="keyproxy.py keyproxy-set.py keyproxy-health install.sh"
-case "$(uname -s)" in
-  Darwin) OS=mac; SVC_USER=_agentops_keyproxy; APP="/Library/Application Support/agent-ops-keyproxy"
-          LABEL=com.agent-ops.keyproxy; UNIT="/Library/LaunchDaemons/$LABEL.plist"
-          PY=/Library/Developer/CommandLineTools/usr/bin/python3   # root-owned; /usr/bin/python3 is a shim
-          [ -x "$PY" ] || PY=/usr/bin/python3 ;;
-  Linux)  OS=linux; SVC_USER=agentops-keyproxy; APP=/usr/local/lib/agent-ops-keyproxy
-          LABEL=agent-ops-keyproxy.service; UNIT="/etc/systemd/system/$LABEL"; PY=/usr/bin/python3
-          command -v systemctl >/dev/null || { echo "needs systemd (on WSL2 enable it in /etc/wsl.conf)"; exit 1; } ;;
-  *) echo "unsupported OS $(uname -s): macOS or Linux only (Windows: use WSL2 with systemd)"; exit 1 ;;
-esac
-
-stop_service() {
-  if [ "$OS" = mac ]; then launchctl bootout "system/$LABEL" 2>/dev/null || true
-  else systemctl disable --now "$LABEL" 2>/dev/null || true; fi
-}
+SVC_USER=_agentops_keyproxy
+APP="/Library/Application Support/agent-ops-keyproxy"
+LABEL=com.agent-ops.keyproxy
+UNIT="/Library/LaunchDaemons/$LABEL.plist"
+PY=/Library/Developer/CommandLineTools/usr/bin/python3   # root-owned; /usr/bin/python3 is a shim
+[ -x "$PY" ] || PY=/usr/bin/python3
 
 if [ "$UNINSTALL" = 1 ]; then
-  stop_service
-  rm -f "$UNIT"; [ "$OS" = linux ] && systemctl daemon-reload
+  launchctl bootout "system/$LABEL" 2>/dev/null || true
+  rm -f "$UNIT"
   rm -rf "$APP"
   if [ "$PURGE" = 1 ]; then
     rm -rf "$DATA" "$LOGS"
-    if [ "$OS" = mac ]; then dscl . -delete "/Users/$SVC_USER" 2>/dev/null || true; dscl . -delete "/Groups/$SVC_USER" 2>/dev/null || true
-    else userdel "$SVC_USER" 2>/dev/null || true; fi
+    dscl . -delete "/Users/$SVC_USER" 2>/dev/null || true
+    dscl . -delete "/Groups/$SVC_USER" 2>/dev/null || true
     echo "keyproxy removed, store + logs + service user purged"
   else
     echo "keyproxy removed; store kept in $DATA (re-run with --uninstall --purge to delete it)"
@@ -60,37 +51,31 @@ fi
 [ -x "$PY" ] || { echo "need python3 at $PY"; exit 1; }
 
 # ---- service user ----
-if [ "$OS" = mac ]; then
-  if ! dscl . -read "/Users/$SVC_USER" >/dev/null 2>&1; then
-    ID=""
-    for i in $(seq 400 499); do
-      if ! dscl . -list /Users UniqueID | awk -v id="$i" '$2==id{f=1} END{exit !f}' &&
-         ! dscl . -list /Groups PrimaryGroupID | awk -v id="$i" '$2==id{f=1} END{exit !f}'; then ID=$i; break; fi
-    done
-    [ -n "$ID" ] || { echo "no free id in 400-499"; exit 1; }
-    dscl . -create "/Groups/$SVC_USER"; dscl . -create "/Groups/$SVC_USER" PrimaryGroupID "$ID"
-    dscl . -create "/Users/$SVC_USER"
-    dscl . -create "/Users/$SVC_USER" UniqueID "$ID"
-    dscl . -create "/Users/$SVC_USER" PrimaryGroupID "$ID"
-    dscl . -create "/Users/$SVC_USER" UserShell /usr/bin/false
-    dscl . -create "/Users/$SVC_USER" NFSHomeDirectory /var/empty
-    dscl . -create "/Users/$SVC_USER" RealName "agent-ops key proxy"
-    dscl . -create "/Users/$SVC_USER" IsHidden 1
-    dscl . -create "/Users/$SVC_USER" Password '*'
-    echo "created service user $SVC_USER ($ID)"
-  fi
-  ROOTGRP=wheel
-else
-  id "$SVC_USER" >/dev/null 2>&1 || { useradd --system --no-create-home --home-dir /nonexistent --shell /usr/sbin/nologin "$SVC_USER"; echo "created service user $SVC_USER"; }
-  ROOTGRP=root
+if ! dscl . -read "/Users/$SVC_USER" >/dev/null 2>&1; then
+  ID=""
+  for i in $(seq 400 499); do
+    if ! dscl . -list /Users UniqueID | awk -v id="$i" '$2==id{f=1} END{exit !f}' &&
+       ! dscl . -list /Groups PrimaryGroupID | awk -v id="$i" '$2==id{f=1} END{exit !f}'; then ID=$i; break; fi
+  done
+  [ -n "$ID" ] || { echo "no free id in 400-499"; exit 1; }
+  dscl . -create "/Groups/$SVC_USER"; dscl . -create "/Groups/$SVC_USER" PrimaryGroupID "$ID"
+  dscl . -create "/Users/$SVC_USER"
+  dscl . -create "/Users/$SVC_USER" UniqueID "$ID"
+  dscl . -create "/Users/$SVC_USER" PrimaryGroupID "$ID"
+  dscl . -create "/Users/$SVC_USER" UserShell /usr/bin/false
+  dscl . -create "/Users/$SVC_USER" NFSHomeDirectory /var/empty
+  dscl . -create "/Users/$SVC_USER" RealName "agent-ops key proxy"
+  dscl . -create "/Users/$SVC_USER" IsHidden 1
+  dscl . -create "/Users/$SVC_USER" Password '*'
+  echo "created service user $SVC_USER ($ID)"
 fi
 
 # ---- root-owned code: no agent can change what the daemon does ----
-install -d -o root -g "$ROOTGRP" -m 755 "$APP"
+install -d -o root -g wheel -m 755 "$APP"
 if [ "$SRC" != "$APP" ]; then
   for f in $FILES; do
     case "$f" in *.py) m=644 ;; *) m=755 ;; esac
-    install -o root -g "$ROOTGRP" -m "$m" "$SRC/$f" "$APP/$f"
+    install -o root -g wheel -m "$m" "$SRC/$f" "$APP/$f"
   done
 fi
 
@@ -103,9 +88,8 @@ touch "$LOGS/audit.log" "$LOGS/daemon.err"
 chown "$SVC_USER:$SVC_USER" "$LOGS/audit.log" "$LOGS/daemon.err"; chmod 644 "$LOGS/audit.log" "$LOGS/daemon.err"
 
 # ---- service ----
-stop_service
-if [ "$OS" = mac ]; then
-  cat > "$UNIT" <<EOF
+launchctl bootout "system/$LABEL" 2>/dev/null || true
+cat > "$UNIT" <<EOF
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -130,40 +114,9 @@ if [ "$OS" = mac ]; then
 </dict>
 </plist>
 EOF
-  chown root:wheel "$UNIT"; chmod 644 "$UNIT"
-  sleep 1
-  launchctl bootstrap system "$UNIT"
-else
-  cat > "$UNIT" <<EOF
-[Unit]
-Description=agent-ops key proxy (loopback only)
-After=network-online.target
-
-[Service]
-User=$SVC_USER
-Group=$SVC_USER
-ExecStart=$PY -I $APP/keyproxy.py
-Environment=KEYPROXY_STORE=$DATA/store.json KEYPROXY_PORT=$PORT KEYPROXY_LOG_DIR=$LOGS PYTHONDONTWRITEBYTECODE=1
-Restart=always
-RestartSec=2
-NoNewPrivileges=yes
-ProtectHome=yes
-PrivateTmp=yes
-ProtectSystem=strict
-ReadWritePaths=$DATA $LOGS
-PrivateDevices=yes
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
-CapabilityBoundingSet=
-LockPersonality=yes
-StandardError=append:$LOGS/daemon.err
-
-[Install]
-WantedBy=multi-user.target
-EOF
-  chmod 644 "$UNIT"
-  systemctl daemon-reload
-  systemctl enable --now "$LABEL"
-fi
+chown root:wheel "$UNIT"; chmod 644 "$UNIT"
+sleep 1
+launchctl bootstrap system "$UNIT"
 
 for _ in 1 2 3 4 5 6 7 8 9 10; do
   curl -q -fsS -m 2 "http://127.0.0.1:$PORT/_health" >/dev/null 2>&1 && break
