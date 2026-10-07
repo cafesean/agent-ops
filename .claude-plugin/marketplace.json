@@ -1,0 +1,15 @@
+{
+  "name": "agent-ops",
+  "owner": { "name": "Sean Liao" },
+  "metadata": {
+    "description": "Agent orchestration and workflow optimization for Claude Code — chief of staff, plan/do/babysit, and a guided init"
+  },
+  "plugins": [
+    {
+      "name": "agent-ops",
+      "version": "0.3.1",
+      "source": "./plugin",
+      "description": "Run Claude Code like a chief of staff: one chief session that triages, plans, dispatches worker sessions, tracks goals and reports in one place. /agent-ops:init sets up the whole configuration."
+    }
+  ]
+}

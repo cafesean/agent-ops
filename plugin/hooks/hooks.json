@@ -1,0 +1,50 @@
+{
+  "description": "mini-run-guard (remote runner add-on; inactive unless configured): denies heavy Bash commands (tsc, builds, full test suites) under the configured scope root and names the exact `mini-run <cmd>` to use. Escape: COS_ALLOW_LOCAL_HEAVY=1 or `# local-ok: <reason>`. cos-heartbeat: chief-spawned workers (env COS_WORKER) touch $COS_HEARTBEAT_DIR/<worker> on every tool call / turn end (zero tokens). cos-ck: the exact prompt ⟦CK⟧ in a worker injects the check-in protocol (protocols/ck.md).",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/mini-run-guard.sh\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/cos-heartbeat.sh\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/cos-heartbeat.sh\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/cos-ck.sh\"",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
