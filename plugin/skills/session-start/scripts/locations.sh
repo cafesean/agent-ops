@@ -49,9 +49,13 @@ if [ -f "$cfg" ]; then
   [ -z "$spec" ] && { v="$(cfg_val COS_SPECS_DIR)";    [ -n "$v" ] && { spec="$v"; src_p="config"; }; }
 fi
 
-# 3. defaults
-[ -z "$sess" ] && sess="sessions"
-[ -z "$spec" ] && spec="specs"
+# 3. defaults: an existing `_ai/sessions` wins, an existing `_context` wins when specs/ is absent; else <repo>/sessions, <repo>/specs
+if [ -z "$sess" ]; then
+  if [ -d "$root/_ai/sessions" ]; then sess="_ai/sessions"; src_s="default:_ai/sessions"; else sess="sessions"; fi
+fi
+if [ -z "$spec" ]; then
+  if [ -d "$root/_context" ] && [ ! -d "$root/specs" ]; then spec="_context"; src_p="default:_context"; else spec="specs"; fi
+fi
 
 absify() {  # ~ expansion, Windows → POSIX, relative → under repo root
   local p; p="$(cos_path "$1")"

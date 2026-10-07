@@ -19,7 +19,7 @@ Includes the session-logging family and plugin tooling.
 | | `agent-ops:agent-updater` (agent) | fold session lessons into SKILL.md / agent files in your plugin source repos (`COS_PLUGIN_REPOS`) |
 | | `/agent-ops:version-bump` | bump plugin.json + marketplace.json (+ package.json), changelog, commit, tag; never pushes unasked |
 
-Session files go to `.agent-ops.json` `sessionsDir` → `COS_SESSIONS_DIR` → `./sessions` (specs likewise: `specsDir` → `COS_SPECS_DIR` → `./specs`). Coming from claude-mem-pro: see [MIGRATION.md](MIGRATION.md).
+Session files go to `.agent-ops.json` `sessionsDir` → `COS_SESSIONS_DIR` → an existing `_ai/sessions` → `./sessions` (specs likewise: `specsDir` → `COS_SPECS_DIR` → an existing `_context` → `./specs`). Coming from claude-mem-pro: see [MIGRATION.md](MIGRATION.md).
 
 ## 60-second install
 ```

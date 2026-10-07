@@ -10,14 +10,13 @@ Nothing is assumed about the repo layout, and no other plugin is required.
 |---|--------|---------------|-------|
 | 1 | `<repo>/.agent-ops.json` | `sessionsDir` | `specsDir` |
 | 2 | agent-ops config (`$AGENT_OPS_CONFIG`, default `~/.claude/agent-ops/config.env`) | `COS_SESSIONS_DIR` | `COS_SPECS_DIR` |
-| 3 | Default | `<repo>/sessions` | `<repo>/specs` |
+| 3 | Default | `<repo>/_ai/sessions` when that folder exists, else `<repo>/sessions` | `<repo>/specs`, or `<repo>/_context` when it exists and `specs/` does not |
 
 Relative paths resolve against the repo root (`git rev-parse --show-toplevel`, else the
 current directory). `~` and Windows paths (`C:\x`) are accepted.
 
-Optional: if a memory plugin such as claude-mem-pro has already recorded a per-project
-`sessionsDir` / `specsDirs` for this repo and none of rows 1-2 is set, you may use its
-values instead of the defaults (keeps an existing session archive in place).
+Another plugin's recorded paths (for example claude-mem-pro) are NOT read. If a repo keeps its
+archive somewhere the defaults do not find, add `.agent-ops.json` with `sessionsDir` / `specsDir`.
 
 Active-session tracker: `<sessions dir>/.current-session` — one session filename per line,
 so several sessions can be active at once. Append on start, remove only your own line on end.

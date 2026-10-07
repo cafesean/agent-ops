@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.5.2 — 2026-10-07
+Session paths: reuse an existing `_ai/sessions` / `_context` layout before falling back to `./sessions` / `./specs`. `MIGRATION.md` no longer claims claude-mem-pro paths are read (they were not).
+
 ## 0.5.1 — 2026-10-07
 Key proxy is macOS only.
 - `install.sh` drops the untested Linux/systemd branch and refuses on any other OS; the add-on stays off there.

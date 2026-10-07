@@ -13,6 +13,5 @@ Session files keep the same format (frontmatter + sections), so existing files k
 
 ## Where files go
 `.agent-ops.json` in the repo (`sessionsDir`, `specsDir`) → `COS_SESSIONS_DIR` / `COS_SPECS_DIR` in
-`~/.claude/agent-ops/config.env` → `./sessions` and `./specs` in the repo root. If a repo already keeps
-sessions where claude-mem-pro put them, set `sessionsDir` in `.agent-ops.json` to that path (or let the skill
-reuse the claude-mem-pro value when nothing else is set) so nothing moves.
+`~/.claude/agent-ops/config.env` → the repo's existing `_ai/sessions` folder (and `_context` when `specs/` does not exist) → `./sessions` and `./specs` in the repo root. claude-mem-pro's recorded paths are not read:
+if your archive lives elsewhere, set `sessionsDir` in `.agent-ops.json` so nothing moves.
