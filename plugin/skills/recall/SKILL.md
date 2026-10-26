@@ -8,6 +8,13 @@ description: "Use when the user asks what was done, decided or learned in past w
 The artifacts hold the knowledge, not this skill. Find the right artifact and the right
 section inside it, then read only that section.
 
+## Continuity ladder — when NOT to use this skill
+Cheapest rung that keeps the most context wins ("efficient with costs, and leveraging existing context when it makes sense"):
+1. Owner session still LIVE → message it (SendMessage); it answers from cache. 2. Closed, last turn < 50 min → resume it (warm cache; chief: `spawn.sh --resume <uuid> --resume-prompt`).
+3. Cold + session file whose Resume Here is newer than the last turn → read that file. 4. Cold + no such file → **session-from-transcript** (haiku mining), then continue.
+5. Only a fact or decision is needed → **recall** on the artifacts; no session at all.
+This skill is rung 5 only — when the WORK must continue, climb back to rungs 1–4.
+
 ## Step 0: Resolve where artifacts live
 
 ```bash

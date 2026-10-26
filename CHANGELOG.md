@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.7.1 — 2026-10-26
+`session-from-transcript` and `recall` open with the 5-rung continuity ladder (live → message, < 50 min → resume, cold + fresh Resume Here → read it, else mine, fact only → recall) so neither runs when a cheaper rung fits.
+
 ## 0.7.0 — 2026-10-07
 `init` now sets the per-repo session, specs and memory folders (writes `.agent-ops.json`) and shows the result of `locations.sh`. New optional `memoryDir` / `COS_MEMORY_DIR`; `locations.sh` prints `MEMORY_DIR` (empty when unset) and `recall` searches it. Replaces claude-mem-pro's `init` path setup.
 

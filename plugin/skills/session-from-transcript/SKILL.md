@@ -16,6 +16,13 @@ one after the fact into the same directory and tracker, so the result is indisti
 from a live-logged file. For a printed recap of any transcript use `/agent-ops:recap-session`;
 to mine curated `.md` session files for plugin updates use `/agent-ops:session-analysis`.
 
+## Continuity ladder — when NOT to use this skill
+Cheapest rung that keeps the most context wins ("efficient with costs, and leveraging existing context when it makes sense"):
+1. Owner session still LIVE → message it (SendMessage); it answers from cache. 2. Closed, last turn < 50 min → resume it (warm cache; chief: `spawn.sh --resume <uuid> --resume-prompt`).
+3. Cold + session file whose Resume Here is newer than the last turn → read that file. 4. Cold + no such file → **session-from-transcript** (haiku mining), then continue.
+5. Only a fact or decision is needed → **recall** on the artifacts; no session at all.
+This skill is rung 4 only.
+
 ## Step 0: Resolve locations
 
 ```bash
