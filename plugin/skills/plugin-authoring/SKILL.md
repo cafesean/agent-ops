@@ -15,6 +15,18 @@ Read-only. Prints `PASS` / `WARN` / `FAIL` lines, exits 1 on any FAIL. Checks ma
 `marketplace.json`, frontmatter `name` vs file/dir, `model:` values, description length and quoting,
 `hooks.json` shape, cwd-relative script paths and CRLF line ends.
 
+## Skill structure: universal rules only (Sean's basic principle, 2026-10-28)
+
+Sessions keep forgetting this, so it sits at the top. A skill's SKILL.md and its general references hold
+**universal rules only**: rules true for every case the skill covers.
+
+- Anything specific to one customer, brand, campaign, creator, ad or content type, product or run goes in **its own
+  reference file for that type** (for example `references/styles/<type>.md`, `references/<case>.md`), loaded only
+  when that case applies. The generic file points to the folder, never to one case.
+- No brand names, campaign examples or one run's style in the generic files. One run's lesson splits in two: the
+  general rule (no names) goes in the generic file; the specific detail goes in the type file.
+- There will be many types to handle. A generic file that grows type-specific rules breaks every other type.
+
 ## Rule zero: no hosts, no secrets in a plugin
 Plugin repos are shared git repos. Anything in an agent, skill or reference file is published to every reader,
 permanently, through git history. Never write IPs, hostnames, app domains, SSH users, key file names, account or
