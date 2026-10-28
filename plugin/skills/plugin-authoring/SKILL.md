@@ -27,6 +27,18 @@ Sessions keep forgetting this, so it sits at the top. A skill's SKILL.md and its
   general rule (no names) goes in the generic file; the specific detail goes in the type file.
 - There will be many types to handle. A generic file that grows type-specific rules breaks every other type.
 
+Three layers, the same in every system (Sean, 2026-10-28):
+
+| Layer | Holds | Platform example | Content example |
+|---|---|---|---|
+| Skill (SKILL.md + general refs) | universal rules | `cadra:agents` | `content-creation:higgsfield-video` |
+| Type reference (`references/<type>.md`) | how one module or type works or is configured differently, on a shared core | `agents` → `references/execution.md`, roles | `styles/product-reel.md` |
+| Context / instance notes | one specific case's detail, captured as it happens | `_context/<project>/` specs and wiki | per-ad notes, per-product notes |
+
+Every update-references run feeds all three: the general rule up, the type detail into its reference, the case
+detail into context.
+
+
 ## Rule zero: no hosts, no secrets in a plugin
 Plugin repos are shared git repos. Anything in an agent, skill or reference file is published to every reader,
 permanently, through git history. Never write IPs, hostnames, app domains, SSH users, key file names, account or
