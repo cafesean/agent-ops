@@ -8,6 +8,11 @@ description: Use when wrapping up a development session — appends a closing su
 Close the active session file so another developer or agent can understand everything that
 happened without reading it top to bottom.
 
+**Every finished task updates skills.** A session file is a log; the next session loads skills, not logs. At
+DONE, run the reference-update skill for every learning (root cause, gotcha, proof recipe, dead end), and
+create a skill (`agent-ops:plugin-authoring`) when none fits. Never judge a learning too small. Name the
+updated files and the plugin commit in the DONE line.
+
 ## Step 0: Resolve locations
 
 ```bash

@@ -93,7 +93,7 @@ Hook schema, the anti-patterns that silently never fire, and cross-platform scri
 Edit only the plugin's source git repo. Never edit `~/.claude/plugins/marketplaces/…` or
 `~/.claude/plugins/cache/…`: the installer overwrites both, and edits there are lost. After a content change:
 bump the version in `plugin.json` and the plugin's `marketplace.json` entry together (use the `version-bump`
-skill), commit, and let the user push. Users then run `/plugin marketplace update <marketplace>`,
+skill), commit, and let the user push. (When the user's standing rule says plugin edits land at once, bump → commit → push right after the edit; see `version-bump` § Push.) Users then run `/plugin marketplace update <marketplace>`,
 `/plugin` to install, `/reload-plugins` to activate. Reload alone never fetches.
 
 Full release path and the stale-cache gotcha: read `references/structure-and-hooks.md` § Release path.
@@ -102,6 +102,12 @@ Full release path and the stale-cache gotcha: read `references/structure-and-hoo
 Re-read the source material (session file, code, error logs) and check the new text against it. First drafts
 miss edge cases. Run the checker. Then run the audit and verification checklists in
 `references/verification.md`.
+
+- **Delegating a plugin edit:** a skill/doc text edit, version bump or commit of a known change goes to a
+  `sonnet` subagent with an exact spec, never `opus` (user cost rule, 2026-10-04).
+- **Plugin scope:** keep plugins enabled at user scope; trim a folder by disabling only
+  (`"enabledPlugins": {"<plugin>@<mkt>": false}` in that folder's `.claude/settings.local.json`). Removing a
+  plugin from user scope silently drops it in sub-repo sessions.
 
 ## Subagents inside a skill
 A skill that spawns subagents must use the native Agent tool (explicit `subagent_type`), never shell-out

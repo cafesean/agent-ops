@@ -130,6 +130,11 @@ Name skills by action, not by tool or actor:
 Pipelines should read as a sequence: `/create-specs → /review-specs → /address-feedback → /develop-specs`.
 
 ## Grouping and duplication
+- **Only actionable docs become skills.** A file that tells the agent what to DO (a procedure, a playbook) is a
+  skill; entity pages, wiki and reference material stay flat files.
+- **Duplicates across team plugins can be intentional.** When separate teams each install only their own
+  plugin, the same skill in both is on purpose: never delete or merge one out to dedupe; fixing stale facts
+  in both is fine.
 - Group skills by feature area (`billing-subscriptions`, `i18n`), not by file type (`database-skills`).
 - New skill when the area has 3+ distinct patterns and is independently triggerable; otherwise extend an existing one.
 - Before creating one, search existing descriptions:

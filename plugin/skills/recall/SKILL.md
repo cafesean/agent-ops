@@ -37,6 +37,15 @@ it points at. A skill that names a reference is saying the reference is required
 This skill is for cross-cutting recall: "when did we decide X", "have we hit this
 before", "what changed last time".
 
+**A missing session file is not proof work is incomplete.** People ship faster than they log. Code on the
+main development branch plus the user's word outrank session coverage: if git shows substantial built code,
+lean "shipped". Say "not done" only when you can show the absence AND the user has not claimed it done; when
+unsure, ask plainly instead of writing a skeptical correction.
+
+**Before a domain task, sweep first.** Every note on the topic (full file list, no `head` cutoff), the prior
+session files, and the user's matching skills and agents. Write the current state and open questions, then
+start the work. Skipping the sweep is how settled facts get missed.
+
 ## Where knowledge lives (search in authority order)
 
 1. **CLAUDE.md** (per repo): standing rules and architecture. Highest trust.

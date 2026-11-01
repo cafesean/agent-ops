@@ -71,6 +71,14 @@ git -C <repo-root> push origin vX.Y.Z
 Then tell the user how installs pick it up: `/plugin marketplace update <marketplace>`, `/plugin`,
 `/reload-plugins` (reload alone never fetches).
 
+**Plugin repos differ from app repos.**
+- "Push the plugin" means the whole sequence: bump → commit → push. Do not ask for each step.
+- Plugin repos merge feature → `main` directly; there is no develop hop (a merge to `main` is the release,
+  because `/plugin marketplace update` pulls `main`). A branch-guard hook that demands develop is wrong here.
+- When the user's standing rule says plugin edits land immediately, run the sequence right after the edit and
+  land other sessions' pending skill edits in the same repo too, each with an explicit pathspec commit
+  (`git commit -m "<msg>" -- <paths>`; the index is shared), then verify with `git ls-remote origin refs/heads/main`.
+
 ## Checklist
 - [ ] plugin.json, marketplace entry and package.json (if any) all show X.Y.Z
 - [ ] `git grep` for the old version finds nothing that should have moved

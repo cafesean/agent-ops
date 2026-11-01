@@ -10,6 +10,14 @@ Append to the active session file. Session files feed later recall and vector se
 every section must be self-contained, specific and detailed. This is the session log a
 worker writes at the end of each task.
 
+**Run it once, when the whole task is finished** (the user signs off or says stop), never mid-task. When
+broadcasting this rule to live workers, say "when you finish, not now". If the task produced learnings, run
+the reference-update skill right after and name what it changed.
+
+**Shared memory index:** when the memory folder is synced between machines, edit `MEMORY.md` one line at a
+time; never write the whole file (a sync conflict picks a winner, and a full rewrite silently drops the other
+machine's lines).
+
 ## Step 0: Resolve locations
 
 ```bash
