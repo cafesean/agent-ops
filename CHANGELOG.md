@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.7.5 — 2026-11-07
+`plugin-authoring`: the skill-structure section now carries a six-check placement gate (owner, already there, universal vs type, turn-1 test, instruction not history, shortest text) that runs before any rule is added to a skill.
+
 ## 0.7.1 — 2026-10-26
 `session-from-transcript` and `recall` open with the 5-rung continuity ladder (live → message, < 50 min → resume, cold + fresh Resume Here → read it, else mine, fact only → recall) so neither runs when a cheaper rung fits.
 

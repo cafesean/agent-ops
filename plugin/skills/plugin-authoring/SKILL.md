@@ -15,10 +15,10 @@ Read-only. Prints `PASS` / `WARN` / `FAIL` lines, exits 1 on any FAIL. Checks ma
 `marketplace.json`, frontmatter `name` vs file/dir, `model:` values, description length and quoting,
 `hooks.json` shape, cwd-relative script paths and CRLF line ends.
 
-## Skill structure: universal rules only (Sean's basic principle, 2026-10-28)
+## Skill structure and rule placement (read before writing any rule)
 
-Sessions keep forgetting this, so it sits at the top. A skill's SKILL.md and its general references hold
-**universal rules only**: rules true for every case the skill covers.
+A skill's SKILL.md and its general references hold **universal rules only**: rules true for every case the
+skill covers.
 
 - Anything specific to one customer, brand, campaign, creator, ad or content type, product or run goes in **its own
   reference file for that type** (for example `references/styles/<type>.md`, `references/<case>.md`), loaded only
@@ -27,7 +27,7 @@ Sessions keep forgetting this, so it sits at the top. A skill's SKILL.md and its
   general rule (no names) goes in the generic file; the specific detail goes in the type file.
 - There will be many types to handle. A generic file that grows type-specific rules breaks every other type.
 
-Three layers, the same in every system (Sean, 2026-10-28):
+Three layers, the same in every system:
 
 | Layer | Holds | Platform example | Content example |
 |---|---|---|---|
@@ -38,6 +38,23 @@ Three layers, the same in every system (Sean, 2026-10-28):
 Every update-references run feeds all three: the general rule up, the type detail into its reference, the case
 detail into context.
 
+### Placement gate: run before adding or changing any rule in a skill
+
+When you write or maintain skill content, a rule is placed, never appended blindly. Run all six checks per rule:
+
+1. **Owner.** Which ONE skill does the work this rule governs? The rule goes there. No skill fits → create one, or
+   add a reference to the nearest owner. Never a catch-all file.
+2. **Already there?** Search the owner skill and its references for the topic. If a version exists, edit or merge
+   it. Never append a second, dated version beside the first.
+3. **Universal or type-specific?** True for every case the skill covers → SKILL.md or a general reference. True for
+   one app, customer, brand, run or type → `references/<type>.md` (layers above).
+4. **Turn-1 test.** Spawn prompt text, global `~/.claude/CLAUDE.md` and project `CLAUDE.md` take a rule only if
+   every session needs it before its first tool call. Everything else lives in the skill; leave at most a one-line
+   pointer there.
+5. **Instruction, not history.** Rule text has no dates, no quotes and no incident story; write what to do.
+   Evidence (who asked, when, what broke) goes to a memory file headed
+   `> HISTORY — rule now in <plugin:skill § section>`.
+6. **Shortest text that changes behaviour.** Delete or rewrite the text the new rule replaces.
 
 ## Rule zero: no hosts, no secrets in a plugin
 Plugin repos are shared git repos. Anything in an agent, skill or reference file is published to every reader,
