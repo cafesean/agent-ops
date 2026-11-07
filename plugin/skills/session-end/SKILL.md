@@ -44,7 +44,9 @@ suggest `/agent-ops:session-start`. Stop.
 
 ## Step 3: Propagate durable knowledge
 
-- Fold durable lessons and standards into the repo's `CLAUDE.md` and standards docs under `$SPECS_DIR`.
+- Place each durable lesson through the placement gate (`agent-ops:plugin-authoring` § Placement gate): the owning
+  skill or standards doc under `$SPECS_DIR` first; the repo's `CLAUDE.md` only for a rule every session needs before
+  its first tool call.
 - Refresh `## Context Documents` with the files that would get a new agent up to speed fastest.
 
 ## Step 4: Close the tracker

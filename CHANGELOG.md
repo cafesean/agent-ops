@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.7.6 — 2026-11-07
+`session-end` step 3 places durable lessons through the placement gate: the owning skill first, the repo `CLAUDE.md` only for rules every session needs before its first tool call.
+
 ## 0.7.5 — 2026-11-07
 `plugin-authoring`: the skill-structure section now carries a six-check placement gate (owner, already there, universal vs type, turn-1 test, instruction not history, shortest text) that runs before any rule is added to a skill.
 
