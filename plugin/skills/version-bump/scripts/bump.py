@@ -57,14 +57,52 @@ def replace_top_level(text, old, new):
     return None
 
 
+def object_spans(text):
+    # (start, end) of every JSON object in text, string-aware
+    spans, stack, in_str, esc = [], [], False, False
+    for i, ch in enumerate(text):
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == "\\":
+                esc = True
+            elif ch == '"':
+                in_str = False
+        elif ch == '"':
+            in_str = True
+        elif ch == "{":
+            stack.append(i)
+        elif ch == "}" and stack:
+            spans.append((stack.pop(), i + 1))
+    return spans
+
+
 def replace_in_entry(text, name, old, new):
-    # inside the plugins[] object whose "name" is NAME: replace its "version"
-    for m in re.finditer(r'\{[^{}]*"name"\s*:\s*"' + re.escape(name) + r'"[^{}]*\}', text):
-        block = m.group(0)
-        nb, n = re.subn(r'("version"\s*:\s*")' + re.escape(old) + '"', r"\g<1>" + new + '"', block, count=1)
-        if n:
-            return text[:m.start()] + nb + text[m.end():]
+    # inside the plugins[] object whose own "name" is NAME (nested objects allowed): replace its "version"
+    for start, end in object_spans(text):
+        block = text[start:end]
+        try:
+            obj = json.loads(block)
+        except ValueError:
+            continue
+        if not isinstance(obj, dict) or obj.get("name") != name or "plugins" in obj:
+            continue
+        nb = replace_top_level(block, old, new)
+        if nb is not None:
+            return text[:start] + nb + text[end:]
     return None
+
+
+def no_entry_reason(entries, name):
+    names = [p.get("name") for p in entries if isinstance(p, dict)]
+    if not names:
+        return "marketplace has no plugins[] entries"
+    if name is None:
+        return f"marketplace has {len(names)} plugins; pass --plugin NAME"
+    ci = [n for n in names if isinstance(n, str) and n.lower() == name.lower()]
+    if ci:
+        return f"no entry named exactly '{name}'; found it in a different case: {', '.join(ci)}"
+    return f"no entry with that name (have: {', '.join(str(n) for n in names)})"
 
 
 def main(argv):
@@ -89,7 +127,7 @@ def main(argv):
         entries = mp.get("plugins", [])
         entry = next((p for p in entries if p.get("name") == name), None) if name else (entries[0] if len(entries) == 1 else None)
         if entry is None:
-            print("marketplace has several plugins (or none matched); pass --plugin NAME", file=sys.stderr)
+            print(f"no marketplace entry for '{name}' in {mp_path}: {no_entry_reason(entries, name)}", file=sys.stderr)
             return 1
         name = entry["name"]
         src = entry.get("source")
@@ -122,7 +160,7 @@ def main(argv):
         if e.get("version") is not None:
             t = replace_in_entry(mp_text, name, e["version"], new)
             if t is None:
-                print(f"could not edit the '{name}' entry in {mp_path}", file=sys.stderr)
+                print(f"could not edit the '{name}' entry in {mp_path}: entry found by name but no version \"{e['version']}\" at its top level", file=sys.stderr)
                 return 1
             edits.append((mp_path, t))
     for pkg in sorted(set(glob.glob(os.path.join(root, "package.json")) + glob.glob(os.path.join(plugin_dir, "package.json")))):
