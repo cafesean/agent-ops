@@ -48,7 +48,7 @@ Exact formats: [update format](references/update-format.md). Use real timestamps
 ## Step 4: Refresh standing sections
 
 SDK Notes, Architecture Issues (with status), Context Documents, Lessons Learned (topics,
-applies-to, confidence, evidence), User Steering & Corrections (user's exact words),
+applies-to, confidence, evidence), User Steering & Corrections (user's exact words; when `$COS_DIR/steering/<session name>.md` exists, run `python3 <chief-of-staff scripts>/steering-export.py <session name>` first and build this section from that file, one line per item with time, verbatim words and status; never from memory),
 Decisions (why + alternatives), Next Steps. Same reference file.
 
 ## Step 5: Frontmatter fields
