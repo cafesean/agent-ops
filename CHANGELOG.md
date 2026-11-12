@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.7.9 — 2026-11-12
+New shared skill `agent-no-refusals` (p152 R12, facts not refusals; the single owner decides). Hooks: `agent-rule.sh` (UserPromptSubmit) injects a two-line pointer on agent prompts; `agent-refusal-warn.sh` (PreToolUse on Edit/Write/MultiEdit) warns, never blocks, on refusal wording in agent-touching files.
+
 ## 0.7.6 — 2026-11-07
 `session-end` step 3 places durable lessons through the placement gate: the owning skill first, the repo `CLAUDE.md` only for rules every session needs before its first tool call.
 
