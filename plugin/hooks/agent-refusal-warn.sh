@@ -9,7 +9,7 @@ try: d = json.load(sys.stdin)
 except Exception: sys.exit(0)
 ti = d.get("tool_input") or {}
 path = ti.get("file_path") or ""
-if not re.search(r"(remix|configure-cadra|cadra-plugins|yobo-agents|agent|role|tool-authoring|prod-releases|storyboard|review)", path, re.I):
+if not re.search(r"(agent|role|tool-authoring|review)", path, re.I):
     sys.exit(0)
 tool = d.get("tool_name") or ""
 if tool == "MultiEdit": new = " ".join((e.get("new_string") or "") for e in ti.get("edits") or [])

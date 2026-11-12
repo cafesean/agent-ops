@@ -31,7 +31,7 @@ Three layers, the same in every system:
 
 | Layer | Holds | Platform example | Content example |
 |---|---|---|---|
-| Skill (SKILL.md + general refs) | universal rules | `cadra:agents` | `content-creation:higgsfield-video` |
+| Skill (SKILL.md + general refs) | universal rules | `myplugin:agents` | `myplugin:video-production` |
 | Type reference (`references/<type>.md`) | how one module or type works or is configured differently, on a shared core | `agents` → `references/execution.md`, roles | `styles/product-reel.md` |
 | Context / instance notes | one specific case's detail, captured as it happens | `_context/<project>/` specs and wiki | per-ad notes, per-product notes |
 
