@@ -36,8 +36,8 @@ sudo <python3> -I "<code dir>/keyproxy-set.py" llm               # rotate: same 
 
 ## Use it (agents)
 ```
-curl -s http://127.0.0.1:8787/llm/models
-OPENAI_BASE_URL=http://127.0.0.1:8787/llm OPENAI_API_KEY=unused <cmd>
+curl -s http://127.0.0.1:<keyproxy-port>/llm/models
+OPENAI_BASE_URL=http://127.0.0.1:<keyproxy-port>/llm OPENAI_API_KEY=unused <cmd>
 ```
 Any SDK with a base-URL setting works the same way. Give it a dummy key if it insists on one; the proxy drops the caller's auth headers and adds its own.
 

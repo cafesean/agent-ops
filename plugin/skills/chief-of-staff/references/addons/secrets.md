@@ -10,7 +10,7 @@ Use the bundled key proxy, `scripts/addons/keyproxy/`. Full detail: [keyproxy.md
 | Install (once) | the user, sudo | `sudo bash <plugin>/skills/chief-of-staff/scripts/addons/keyproxy/install.sh` |
 | Add a route + key | the user, sudo | `sudo <python3> -I "<code dir>/keyproxy-set.py" <route> --new --upstream https://<api host>[/base] --auth bearer\|header\|basic\|query --test /<path>` |
 | Rotate | the user, sudo | same command without `--new` |
-| Use | any agent | `curl -s http://127.0.0.1:8787/<route>/<path>`, or point an SDK at it: `OPENAI_BASE_URL=http://127.0.0.1:8787/<route>` |
+| Use | any agent | `curl -s http://127.0.0.1:<keyproxy-port>/<route>/<path>`, or point an SDK at it: `OPENAI_BASE_URL=http://127.0.0.1:<keyproxy-port>/<route>` |
 | Check | anyone | `keyproxy-health` (route names + ok; exit 2 when down) |
 
 `install.sh` prints the exact python path and code dir. The value comes from a hidden prompt, from stdin, or with `--clipboard` (macOS). The command prints only `saved <route> (length N)`.
