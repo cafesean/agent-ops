@@ -5,6 +5,8 @@ description: "HARD rule for every Cadra or Yobo agent change, read first: facts,
 
 # No refusals (HARD)
 
+This is an underlying, this is a foundational concept in our agentic best practices. The agent will do what it does. There should not be mechanisms that block the agent from execution. The agent has the knowledge and the skills and it will know how to handle situations. (Sean, 2026-11-12)
+
 The one shared copy of the rule. Agent-touching skills point here and carry the same paragraph.
 The canonical text is p152 R12 (`_context/cadra/_specs/p152-agent-architecture/1-standard.md`, context 92206c3).
 
