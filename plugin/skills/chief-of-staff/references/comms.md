@@ -19,6 +19,20 @@
 
 **Session-to-session messages** go via the `SendMessage` tool to the session NAME. Typing into a pane is a fallback only, and must be verified (below).
 
+**Send only what the receiver must act on now.** A delivered message wakes the receiver into a turn that re-reads its
+whole context (hundreds of thousands of tokens); the message text is ~150. Measured on one day of real traffic
+(3,053 messages): wake turns 6,580M tokens, message text 0.6M. So:
+- No acks (silence = received), no FYI or "no reply needed", no who-is-who broadcasts (the CHIEF / CAPTAIN files
+  are the truth; sessions re-read them before messaging). Status and proof go to the sender's task file Reports.
+- One message per receiver per turn. No `me → you:` prefix: the receiver already sees the sender name.
+- Short codes for fixed kinds, first word of the message; plain words for anything new or unusual:
+  `RR <repo> <branch>@<sha> → dev|prod · local:<proof>` release-request · `LIVE <repo> <sha> <env> · <proof>` ·
+  `BACK <repo> <sha> · <why>` · `REVIEW <item> · <path>` · `GO <item>` / `NO <item> · <why>` ·
+  `HANDOFF <ctx>k · spawn <next> --continues <me> · RH <file>` · `TOOK <old> · <adopted>` · `DONE <task> · <hash>` ·
+  `Q <question>` / `A <answer>`.
+- Keep the codebook inside text every session already loads (this file, the worker rules). A separate file every
+  session reads costs its own size on every later call, more than the codes save.
+
 **User in a pane**: an ask the user answers in a worker's pane is acted on by that worker directly; the chief closes the ask at the next sweep. Never answer the same ask in both places.
 
 ## Working with workers directly
