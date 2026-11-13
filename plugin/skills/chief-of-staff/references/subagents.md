@@ -32,7 +32,7 @@ spawn.sh puts the short form into workers (`worker-rules.md` → *Subagents*); t
   security, multi-file or cross-service state, final review); a worker whose whole job is a hard build spawns on the
   strongest model.
 - Default by task type: test, e2e, proof and read-only research = the cheapest model; code review and build = the middle
-  model; the strongest only when the brief says why. Mechanical roles (sweeps, intake of questions and checks) default cheap.
+  model; the strongest only when the brief says why. Mechanical roles (sweeps, intake of questions and checks) default cheap; a captain lane that only proves (tests, deploy checks) runs on the middle model.
 - Cheapest model first for anything that needs no judgment (transcript mining, test steps, file sweeps); the
   strongest only for judgment work.
 - A strongest-model dispatch that errors → do the work inline; never silently downgrade to a cheaper model.
