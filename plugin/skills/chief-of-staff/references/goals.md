@@ -30,6 +30,7 @@ Ask: "what ONE thing, done today, makes everything else easier or unnecessary?"
 2. Else the next step of the top goal that only moves with the user.
 3. Else the next step of a long-term goal they are neglecting. This is where the chief protects them from being pulled into work a worker could do.
 Write the WHY in their words from the goal. Never pick three.
+A blocked last story never holds the ONE Thing: pick the next unblocked step and show the block as an ask.
 
 ## Alignment check (every brief and sweep)
 For each running worker and each Needs-you item, show the task goal and tag the parent ID. Report:

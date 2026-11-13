@@ -19,12 +19,20 @@
 | Worker heartbeats | `$COS_DIR/.heartbeat/<worker>` | heartbeat hook | `checkin.sh` (per machine) |
 | Alert dedupe | `$COS_DIR/.next-alert-state.json` | `next.sh --alert` | `next.sh --alert` (per machine) |
 | Shipped items (add-on) | `$COS_SHIPPED` (`shipped.yaml`) | worker on DONE when code moved; chief fills a gap | `where-it-is.sh`, `outstanding.sh` |
-| Account limits (add-on) | `$COS_DIR/accounts.md` | `account-limit.sh` | `spawn.sh --account auto` |
+| Chief name | `$COS_DIR/CHIEF` | the chief at Step 0 / takeover | workers before messaging the chief; spawn.sh role pick |
+| Release owner name (optional) | `$COS_DIR/CAPTAIN` | the release owner session | builders sending release requests |
+| Domain leads (optional) | `$COS_DIR/LEADS`, `teams/<domain>.md` | the chief; each lead its roster | workers, `reap.sh` (leads are never reaped) |
+| Steering files | `$COS_DIR/steering/<name>.md` | `steering-export.py` (spawn `--continues`, stop `HANDOFF`, context-handoff guard) | the successor |
+| Load state | per machine, beside the config (`lib/loadgate.py`) | `load-check.sh` | agent-budget-guard hook |
+| Worktree owner stamps | under `.heartbeat/` (per machine) | worktree-owner hook | `stop.sh` exit 9 |
 
 ## In the plugin (git, not the state dir)
 | What | Where | Read by |
 |---|---|---|
 | `⟦CK⟧` protocol | `skills/chief-of-staff/protocols/ck.md` | the check-in hook, fresh on every ping |
+| Worker rulebook | `skills/chief-of-staff/references/worker-rules.md` | every worker (spawn.sh puts one pointer per section in its prompt) |
+| Scripts | `scripts/*.sh`, `asks.py`, `ctx.py`, `steering-export.py`, `reap.sh`; `scripts/lib/` (`tasks.py`, `cos-os.sh`, `lastturn.py`, `loadgate.py`, `handoff.py`, `prodcontent.py`); `scripts/addons/` (`mini-run.sh`, `where-it-is.sh`, `release-gap.sh`, `local-tmux.sh`, `wake-guard.sh`, …) | the chief, hooks, schedulers |
+| Hooks | `plugin/hooks/`: heartbeat, check-in, heavy-cap-guard, agent-budget-guard, send-cold-guard, cold-cache-warn, worktree-owner, context-handoff-guard, ask-guard, cos-reap, mini-run-guard | Claude Code, per session |
 | Scripts, hooks, this skill | the installed plugin (`${CLAUDE_PLUGIN_ROOT}`) | everything |
 
 ## NOT in the state dir — and why
@@ -33,5 +41,4 @@
 | Local config | `${AGENT_OPS_CONFIG:-$HOME/.claude/agent-ops/config.env}` | Paths and prefix differ per machine; may hold notifier targets. Never synced, never in git |
 | Worker launch scripts | written by spawn.sh under the local config dir | Per machine; kept out of shared folders |
 | Secrets | your secret store or vault add-on (`addons/secrets.md`) | Secrets never sit in a folder agents read freely |
-| Claude account tokens (add-on) | OS keychain, by id | Only the id is written anywhere (`addons/accounts.md`) |
 | Transcripts | `~/.claude/projects/<slug>/*.jsonl` | Machine-local by design; why a session file comes first for a successor |

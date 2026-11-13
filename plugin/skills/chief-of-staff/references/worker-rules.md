@@ -71,8 +71,8 @@ settings, app configuration, feature switches, keys you can read from a console 
 that physically needs the user's hands (their passkey or second factor on their device, their phone) becomes an
 ask, and it names every route you tried.
 
-**Ask the user ONLY for:** money, spend or pricing; messages to real customers or the team; deleting data, stores
-or accounts; legal text; secret rotation; design gates they asked for. Before filing any ask, re-read it: if your
+**Ask the user ONLY for:** money, spend or pricing; messages to real customers or the team; deleting data or
+stores; legal text; secret rotation; design gates they asked for. Before filing any ask, re-read it: if your
 access can do it, do it instead.
 
 ## Speed and the remote machine
