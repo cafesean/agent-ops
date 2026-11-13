@@ -56,7 +56,7 @@ def session_name(path):
 
 
 def export_steering(name, path):
-"""Every word the user gave this session → $COS_DIR/steering/<name>.md (scripts/steering-export.py). '' on failure."""
+    """Every word the user gave this session → $COS_DIR/steering/<name>.md (scripts/steering-export.py). '' on failure."""
     import subprocess
     script = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "skills", "chief-of-staff", "scripts",
                           "steering-export.py")
@@ -155,7 +155,7 @@ def main():
     open(mark, "w").write(str(used))
     steer = export_steering(name or sid, path)
     name = os.environ.get("COS_WORKER") or ""
-steer_txt = (f" The user's words to this session are exported verbatim to `{steer}`: before step 3, mark each item's "
+    steer_txt = (f" The user's words to this session are exported verbatim to `{steer}`: before step 3, mark each item's "
                  "status in your session file (done + evidence / open + next step / rule + where filed)." if steer else "")
     who = (f"You are worker `{name}`: start the successor with `spawn.sh --task-file <your task file> --continues "
            f"{name}` (it reads your session file)." if name else
