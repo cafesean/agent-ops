@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.8.3
 - Hooks: new `destroy-guard` (PreToolUse Bash, through cos-py.sh): denies an HTTP DELETE to a guarded route (`COS_DESTROY_HTTP_ROUTES`, default public cloud API hosts) or a cloud CLI destroy verb unless the command carries `# user-named-go: <resource id> <the user's words>` naming that id with a go verb. Kill switch `COS_DESTROY_GUARD=0`. Rule added to SKILL.md Critical rules and worker-rules § Autonomy: destroy needs the user's named go; intent is never the go.
 - Chief of staff, cmux launcher: workspace routing in spawn.sh. Task `title:` names the tab; task `workspace_title:` puts the pane in that workspace (created on first use from the ref `workspace create` returns, placeholder closed after the worker pane exists); a chief task goes to `COS_CHIEF_WORKSPACE_TITLE` (default CHIEF); new `COS_CMUX_WORKSPACE_ROUTES` (`PATTERN=TITLE;…`, case-insensitive glob on "<name> <category> <lane>", existing workspaces only); then the pin and `COS_CMUX_WORKSPACE_TITLE` as before. Workspace titles now match case-insensitively; an empty `cmux tree --all` is retried once; `--dry-run` prints the rule that picked the workspace.
 
