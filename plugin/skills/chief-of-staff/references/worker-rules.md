@@ -59,6 +59,7 @@ spawn.sh picks the role, so each worker's prompt carries only the pointers that 
 - Blocked on the user with nothing else to do: wait idle, one report line naming the ask. Waiting longer than
   `COS_PARK_MIN` (default 50 min) → park (handoff, `status: parked`).
 - Never edit task frontmatter keys other than `asks:`.
+- Score every DECIDE or APPROVE ask with Jev (`tools:jev`) before it reaches the user, and put the result on a `jev:` line. Confidence above 0.60 and not one-way: decide, act, and tell the user after. One-way doors (money, delete, customer message, ad or Meta account, legal text, secret rotation, a limit on a Cadra agent) stay asks.
 
 ## Autonomy — do it, don't ask
 
@@ -92,6 +93,7 @@ resource (SKILL.md § Critical rules; `destroy-guard` hook). Report the facts, t
 - Foreground Bash that can pass 2 min: a long `timeout` or `run_in_background`. A long script runs under
   `nohup … > log 2>&1 &`, watched with a Monitor.
 - Post a status line in the task file at least every 30 min: what finished, what runs next.
+- Heavy-command detection covers `npm exec`, `npx`, `pnpm exec`, `./node_modules/.bin/` forms, and a copy of the repo in a scratchpad dir. Every one of these runs on the mini.
 
 ## No overdoing
 
@@ -231,6 +233,8 @@ file from inside the child process.
 **Transcripts are never deleted.** Claude transcripts (`~/.claude/projects/**/*.jsonl`, incl. subagent files) are
 never deleted, moved or pruned by any session. Temp-dir cleanup checks that task output entries are symlinks into
 the transcripts dir and never touches their targets.
+
+A secret scan prints the matched rule's name, never the matched value. It allow-lists deployment ids (`dpl_…`) and worker version tags. Any other skip names its rule.
 
 ## Context size and handover
 

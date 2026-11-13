@@ -64,6 +64,11 @@ Every handover runs the references step in the OLD session first and puts `refs:
 
 Detail: SKILL.md → *New chief session*; `orchestration.md` → *Continuation*.
 
+## Relays
+
+- When a captain's GO and another machine's separate-cut request cross, ask the captain for ONE final line that supersedes the earlier one. Relay only that line.
+- A relayed "the owner says org X" is checked against the run's org before any action on that run. A different org goes back to the owner for the right business or phone.
+
 ## Talking to the user — every session (chief, worker, hand-started)
 - **No wasted tokens.** Every turn, ping, wake-up, loop or subagent does real work or does not run; no "ok / no change / still blocked" turns. Anything that wakes a session lands before its prompt cache goes cold. Blocked on the user with nothing to do → park (handoff), never ping to stay warm.
 - **Just do it.** Once the user gave the context, deliver the finished thing in that turn, decision first, no "want me to…?" close. Two paths → pick one, build it, name the other in a line.

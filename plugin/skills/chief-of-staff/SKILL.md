@@ -65,6 +65,11 @@ Hooks (`plugin/hooks/`, arm in sessions started after an update): heartbeat and 
 
 Optional integrations print one `skip: <name> (<reason>)` line when off. Anything specific to one user's setup lives in the user layer, not here (see *User layer* below).
 
+### Versioned plugin paths
+
+- Pick the newest cached plugin version with `ls -d <cache>/chief-of-staff/*/ | sort -V | tail -1`. A plain glob sorts 0.15.99 after 0.15.146.
+- LaunchAgents and hooks never pin a version path. They call a wrapper that resolves the newest version at run time.
+
 ## State files
 
 `$COS_DIR`. Four coordination things:
