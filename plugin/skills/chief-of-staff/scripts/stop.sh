@@ -237,7 +237,7 @@ p,n,st=sys.argv[1:]
 lines=open(p).read().split("\n")
 for i in range(len(lines)-1,-1,-1):
     if f"| {n} |" in lines[i]:
-        cells=lines[i].split("|"); cells[7 if len(cells) > 8 else -2]=f" {st} "; lines[i]="|".join(cells); break   # status = 7th cell; 8th = account
+        cells=lines[i].split("|"); cells[7 if len(cells) > 8 else -2]=f" {st} "; lines[i]="|".join(cells); break   # status = 7th cell (legacy rows may have an 8th)
 open(p,"w").write("\n".join(lines))
 PY
 [ -n "$TFILE" ] || echo "ledger: $NAME → $STATUS"

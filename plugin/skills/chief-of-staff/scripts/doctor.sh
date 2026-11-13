@@ -39,7 +39,7 @@ grep -q "$(printf '\r')" "$CONFIG" && row WARN "config line ends" "CRLF — tole
 case "$COS_OS" in
   mac) row PASS "os" "macOS";;
   linux) if [ "$COS_WSL" = 1 ]; then row PASS "os" "linux (WSL) — the recommended Windows setup"; else row PASS "os" "linux"; fi;;
-  windows) row WARN "os" "windows (Git Bash/MSYS) — untested; load-check approximate, no cmux, no multi-account; WSL2 recommended";;
+  windows) row WARN "os" "windows (Git Bash/MSYS) — untested; load-check approximate, no cmux; WSL2 recommended";;
 esac
 if [ "$COS_OS" = windows ] || [ "$COS_WSL" = 1 ]; then
   if grep -qE '^[^#]*[A-Za-z]:\\' "$CONFIG"; then
@@ -139,11 +139,7 @@ if [ -n "${COS_REMOTE_HOST_KEY:-}" ]; then
   [ "${COS_REMOTE_MACHINE_PREFIX:-}" = "${COS_MACHINE_PREFIX:-}" ] && row FAIL "remote prefix" "same letter as this machine"
 else row PASS "addon remote runner" "off"; fi
 
-[ "${COS_DEFAULT_ACCOUNT:-a}" = a ] || [ "$COS_OS" = mac ] || row WARN "addon multi-account" "macOS only (Keychain) — skipped here"
-case "${COS_DEFAULT_ACCOUNT:-a}" in
-  auto) [ -f "${COS_ACCOUNTS:-${COS_DIR:-}/accounts.md}" ] && row PASS "addon multi-account" "auto, accounts file present" || row WARN "addon multi-account" "auto, no accounts file yet — add logins with account-add.sh";;
-  *) row PASS "addon multi-account" "off (account ${COS_DEFAULT_ACCOUNT:-a})";;
-esac
+[ -z "${COS_SPAWN_ENV_CMD:-}" ] || { set -- ${COS_SPAWN_ENV_CMD}; command -v "$1" >/dev/null 2>&1 && row PASS "spawn env command" "set (output never shown)" || row WARN "spawn env command" "COS_SPAWN_ENV_CMD not runnable: $1"; }
 if [ -n "${COS_VAULT_PORT:-}" ]; then   # loopback-only check; the proxy returns route names, never secrets
   case "$COS_VAULT_PORT" in *[!0-9]*) row FAIL "addon keyproxy" "COS_VAULT_PORT must be a port number";;
   *) kp=$(bash "$HERE/addons/keyproxy/keyproxy-health" "$COS_VAULT_PORT" 2>/dev/null)

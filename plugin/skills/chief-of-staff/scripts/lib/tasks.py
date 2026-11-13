@@ -8,8 +8,8 @@ tasks/<name>.md = YAML-subset frontmatter (the old mission file + queue/LEDGER f
 Frontmatter keys (references/orchestration.md → Task file):
   name, to (machine prefix that runs it), from, parent_goal, status (open|claimed|running|done|failed|parked|stopped),
   model, approved (false = one-way door awaiting the owner → the queue refuses it), needs ([vault, jira]), dir, agent,
-  account, where, task_goal, done_means, created, started, closed, jira, heartbeat_min, depends_on_missions,
-  story_list, continues, handoff, asks (block list), decisions, slices.
+  role, handoff_at, where, task_goal, done_means, created, started, closed, jira, heartbeat_min, depends_on_missions,
+  story_list, continues, handoff, no_ping (true = checkin never pings it), asks (block list), decisions, slices.
 
 CLI (bash scripts call these):
   tasks.py get FILE KEY                 print one frontmatter value ('' when missing or empty)

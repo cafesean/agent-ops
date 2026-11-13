@@ -10,7 +10,7 @@ cos_source_config "$COS_CONFIG"   # CRLF-tolerant
 # (COS_OS / COS_WSL / COS_PYTHON set in the config win over the detection above)
 
 # Windows paths in config (C:\x) → POSIX (/c/x on Git Bash, /mnt/c/x on WSL). Lists stay colon-separated.
-for _v in COS_DIR COS_OUTSTANDING COS_VAULT COS_MONOREPO COS_INVENTORY COS_ACCOUNTS COS_HEAVY_GUARD_ROOT; do
+for _v in COS_DIR COS_OUTSTANDING COS_VAULT COS_MONOREPO COS_INVENTORY COS_HEAVY_GUARD_ROOT; do
   eval "_x=\${$_v:-}"; [ -z "$_x" ] || eval "$_v=\$(cos_path \"\$_x\")"
 done
 for _v in COS_LAUNCH_DIRS COS_REMOTE_LAUNCH_DIRS COS_REPO_PATHS; do
