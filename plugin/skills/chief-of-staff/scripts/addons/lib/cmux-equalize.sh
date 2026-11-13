@@ -52,3 +52,31 @@ cos_grid_plan() {
       end' 2>/dev/null
   return 0
 }
+
+# Focus guard: a new pane must never take the owner's keyboard focus or switch their visible workspace. Every
+# create step passes --focus false, but snapshot BEFORE the create and check AFTER anyway: if the window now sits
+# on the new surface or the target workspace, put the owner back and log the step so a steal names its cause.
+#   snap=$(cos_focus_snap)                          # "<workspace_ref> <surface_ref>" the window shows now
+#   cos_focus_keep "$snap" <target ws> <new surface> <step>
+# Log: $COS_DIR/logs/focus-steal.log. Needs jq; without it both are no-ops.
+cos_focus_snap() {
+  command -v jq >/dev/null 2>&1 || return 0
+  CMUX_QUIET=1 "$COS_CMUX" rpc surface.current '{}' 2>/dev/null | jq -r '"\(.workspace_ref) \(.surface_ref)"' 2>/dev/null || true
+}
+cos_focus_keep() {
+  local snap="${1:-}" ws="${2:-}" surf="${3:-}" step="${4:-?}" now
+  [ -n "$snap" ] && [ "$snap" != "null null" ] || return 0
+  now=$(cos_focus_snap); [ -n "$now" ] || return 0
+  [ "$now" != "$snap" ] || return 0
+  case "${now% *}|${now#* }" in
+    "$ws|"*|*"|$surf") ;;              # moved onto the target workspace / new surface = a steal
+    *) return 0;;                      # moved elsewhere = the owner clicked; leave them there
+  esac
+  [ "${snap% *}" != "$ws" ] || [ "${now#* }" = "$surf" ] || return 0   # they were already in the target workspace
+  CMUX_QUIET=1 "$COS_CMUX" focus-panel --panel "${snap#* }" --workspace "${snap% *}" >/dev/null 2>&1 || true
+  mkdir -p "${COS_DIR:-$HOME/agent-ops/state}/logs" 2>/dev/null
+  printf '%s focus-steal step=%s was=%s now=%s → restored\n' "$(date '+%F %T')" "$step" "$snap" "$now" \
+    >> "${COS_DIR:-$HOME/agent-ops/state}/logs/focus-steal.log" 2>/dev/null
+  echo "WARN: focus steal after $step ($snap → $now) — restored" >&2
+  return 0
+}

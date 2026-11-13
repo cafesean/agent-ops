@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
-# What is on develop but not on prod, per product — from LIVE git, never memory.
-# Per repo: fetch origin, then count + list origin/<prod>..origin/develop.
-# Read-only on every app repo (git fetch + git log only).
+# What is on develop but not on prod, per product — from CONTENT, never commit ancestry.
+# Hold-out cuts revert work on main while its commits stay in main's history, so origin/main..origin/develop
+# counts held work as shipped. Per repo: fetch origin, `git diff origin/<prod> origin/develop` = held files;
+# each file traced to the develop commits whose change is not in prod's copy (lib/prodcontent.py), grouped
+# by change (commit) with author + date. A differing file is NOT every commit that touched it.
+# Read-only on every app repo (git fetch, log, diff, ls-tree; apply --check into a temp index).
 #   release-gap.sh                    markdown table, every product
 #   release-gap.sh --product <name>   one product
 #   release-gap.sh --json             JSON instead of the table
@@ -20,7 +23,7 @@ while [ $# -gt 0 ]; do
     --product) PRODUCT="${2:-}"; shift 2 ;;
     --json) JSON=1; shift ;;
     --no-fetch) FETCH=0; shift ;;
-    -h|--help) sed -n '2,11p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,14p' "$0"; exit 0 ;;
     *) echo "release-gap: unknown arg $1" >&2; exit 2 ;;
   esac
 done
@@ -64,13 +67,10 @@ for grp in "${GROUPS_[@]}"; do
       printf '%s\n' "$prod_name${US}$name${US}-${US}${note}no prod branch (main/master/production/prod)${US}$prodb${US}" >> "$TMP"; continue
     fi
     [ "$prodb" != "main" ] && note="${note}prod branch = $prodb; "
-    n=$(G -C "$path" rev-list --count "origin/$prodb..origin/develop")
-    nm=$(G -C "$path" rev-list --no-merges --count "origin/$prodb..origin/develop")
-    [ "$nm" != "$n" ] && note="${note}$nm non-merge; "
+    n=$(G -C "$path" rev-list --no-merges --count "origin/$prodb..origin/develop")
     behind=$(G -C "$path" rev-list --no-merges --count "origin/develop..origin/$prodb")
     [ "$behind" != 0 ] && note="${note}$prodb has $behind non-merge commit(s) not on develop (hotfix?); "
-    commits=$(G -C "$path" log --no-merges --format='%h %s' -n "$MAXLIST" "origin/$prodb..origin/develop" | tr '\n' '\036')
-    printf '%s\n' "$prod_name${US}$name${US}$n${US}$note${US}$prodb${US}$commits" >> "$TMP"
+    printf '%s\n' "$prod_name${US}$name${US}OK${US}$note${US}$prodb${US}$path${US}$n" >> "$TMP"
   done
 done
 
@@ -78,46 +78,63 @@ if [ ! -s "$TMP" ]; then
   echo "release-gap: no repos matched${PRODUCT:+ product '$PRODUCT'} (map: $MAP)" >&2; exit 1
 fi
 
-cos_python - "$TMP" "$JSON" "$MAXLIST" <<'PY'
+cos_python - "$TMP" "$JSON" "$MAXLIST" "$HERE/../lib" <<'PY'
 import sys, json, datetime as dt
 path, as_json, maxlist = sys.argv[1], sys.argv[2] == "1", int(sys.argv[3])
-now = dt.datetime.now()
-hm = now.strftime("%H:%M")
+sys.path.insert(0, sys.argv[4]); import prodcontent as P
+now = dt.datetime.now(); hm = now.strftime("%H:%M")
 rows = []
 for line in open(path, encoding="utf-8", errors="replace"):
     line = line.rstrip("\n")
     if not line: continue
-    p = line.split("\x1f")
-    p += [""] * (6 - len(p))
-    product, repo, n, note, prodb, commits = p[:6]
-    rows.append({
-        "product": product, "repo": repo,
-        "ahead": int(n) if n.isdigit() else None,
-        "prod_branch": prodb or None,
-        "note": note.strip().rstrip(";") or None,
-        "commits": [c for c in commits.split("\x1e") if c],
-        "checked": now.isoformat(timespec="seconds"),
-    })
+    p = line.split("\x1f"); p += [""] * (7 - len(p))
+    product, repo, state, note, prodb, rpath, anc = p[:7]
+    row = {"product": product, "repo": repo, "prod_branch": prodb or None, "held_files": None,
+           "changes": [], "files": [], "ancestry_ahead": int(anc) if anc.isdigit() else None,
+           "note": None, "checked": now.isoformat(timespec="seconds")}
+    notes = [note.strip().rstrip(";")] if note.strip() else []
+    if state == "OK":
+        r = P.Repo(rpath, f"origin/{prodb}", "origin/develop")
+        try:
+            files = r.held_files(); row["held_files"] = len(files)
+            ch, hows = {}, {}
+            for f in files:
+                miss, how = r.missing_for_file(f); hows[how] = hows.get(how, 0) + 1
+                row["files"].append({"path": f, "how": how, "commits": [c["short"] for c in miss]})
+                for c in miss:
+                    e = ch.setdefault(c["sha"], {k: c[k] for k in ("short", "author", "date", "subj")} | {"files": 0})
+                    e["files"] += 1
+            row["changes"] = sorted(ch.values(), key=lambda e: (-e["files"], e["date"]))
+            if hows.get("own-edits") or hows.get("merge-made"):
+                notes.append(f"{hows.get('own-edits', 0) + hows.get('merge-made', 0)} file(s) where prod has its own edits — confirm by hand")
+            if files and row["ancestry_ahead"] == 0:
+                notes.append("git log says 0 commits ahead — held work is hidden by a hold-out revert")
+        finally:
+            r.close()
+    elif state not in ("", "OK", "-"):
+        notes.append(state)
+    row["note"] = "; ".join(n for n in notes if n) or None
+    rows.append(row)
 if as_json:
-    print(json.dumps({"checked": now.isoformat(timespec="seconds"), "rows": rows}, indent=2)); sys.exit()
-esc = lambda s: s.replace("|", "\\|")
-print(f"Release gap — develop not on prod · checked {now.strftime('%Y-%m-%d')} {hm}\n")
-print("| Product | Repo | develop ahead of main | top commits | checked |")
+    print(json.dumps({"checked": now.isoformat(timespec="seconds"), "method": "content", "rows": rows}, indent=2)); sys.exit()
+esc = lambda s: str(s).replace("|", "\\|")
+print(f"Release gap — develop content not on prod · checked {now.strftime('%Y-%m-%d')} {hm}\n")
+print("| Product | Repo | held on develop | held changes (commit · who · date · files) | checked |")
 print("|---|---|---|---|---|")
 for r in rows:
-    if r["ahead"] is None:
-        ahead = "—"
-    else:
-        ahead = f"**{r['ahead']}**" if r["ahead"] else "0 ✅"
-        if r["prod_branch"] and r["prod_branch"] != "main": ahead += f" (vs {r['prod_branch']})"
-    cells = [esc(c) for c in r["commits"]]
-    shown = len(r["commits"])
-    if r["ahead"] and r["ahead"] > shown and shown >= maxlist: cells.append("…more")
-    top = "<br>".join(cells) or ""
+    if r["held_files"] is None: held = "—"
+    elif r["held_files"] == 0: held = "0 ✅"
+    else: held = f"**{r['held_files']} files** · {len(r['changes'])} changes"
+    if r["held_files"] and r["prod_branch"] and r["prod_branch"] != "main": held += f" (vs {r['prod_branch']})"
+    cells = [esc(f"{c['short']} {c['subj'][:70]} · {c['author']} · {c['date']} · {c['files']}f") for c in r["changes"][:maxlist]]
+    if len(r["changes"]) > maxlist: cells.append(f"…{len(r['changes']) - maxlist} more (--json)")
+    top = "<br>".join(cells)
     if r["note"]: top = (top + "<br>" if top else "") + f"_{esc(r['note'])}_"
-    print(f"| {r['product']} | {r['repo']} | {ahead} | {top or '—'} | {hm} |")
-tot = sum(r["ahead"] or 0 for r in rows)
-need = [f"{r['product']}/{r['repo']}" for r in rows if r["ahead"]]
-print(f"\n{tot} commits across {len(need)} repo(s) waiting for prod" + (f": {', '.join(need)}" if need else "") + ".")
-print("Count includes merge commits; the list skips them. Git refs only — not proof of what a host is running.")
+    print(f"| {r['product']} | {r['repo']} | {held} | {top or '—'} | {hm} |")
+tot = sum(r["held_files"] or 0 for r in rows)
+need = [f"{r['product']}/{r['repo']}" for r in rows if r["held_files"]]
+print(f"\n{tot} files held across {len(need)} repo(s)" + (f": {', '.join(need)}" if need else "") + ".")
+print("Content check: git diff origin/<prod> origin/develop, each file traced to the commits missing from prod's copy. "
+      "Commit counts (git log/cherry) are NOT used — hold-out reverts keep held commits in main's history. "
+      "Git content only — not proof of what a host is running.")
 PY

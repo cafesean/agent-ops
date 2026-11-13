@@ -3,8 +3,8 @@
 #   spawn.sh --task-file tasks/NAME.md [overrides…]       (the one way in — a queued or hand-written task)
 #   spawn.sh --name NAME --dir DIR --model sonnet|opus --charter FILE   (legacy: builds tasks/NAME.md from the charter)
 #            [--agent NAME] [--remote] [--dry-run] [--no-goal] [--depends-on WORKER]... [--story-list FILE]
-#            [--light] [--force] [--account a|<id>|auto] [--continues OLD-WORKER] [--resume UUID] [--workspace REF]
-#   --task-file F  frontmatter gives name, dir, model, agent, account, depends_on_missions, story_list (flags override);
+#            [--light] [--force] [--continues OLD-WORKER [--fresh-ok]] [--resume UUID [--resume-prompt TEXT]] [--workspace REF]
+#   --task-file F  frontmatter gives name, dir, model, agent, role, depends_on_missions, story_list (flags override);
 #                  its body is the charter. `to:` must be this machine's prefix; status must be open|claimed (else
 #                  exit 2 unless --force). The worker reports under `## Reports` of that file and asks the owner via `asks:`.
 #   Launcher       COS_LAUNCHER (config): print = print the exact claude command + task file path, open nothing;
@@ -15,11 +15,27 @@
 #   --depends-on W another worker that must finish first (repeatable).
 #   --story-list F the feature's story_list.json (else the charter's `story list:` line).
 #   --light        read-only worker: may start while load-check says OFFLOAD.  --force: start anyway.
-#   --account ID   accounts add-on (COS_DEFAULT_ACCOUNT / COS_ACCOUNTS set): a = default login; b, c… = token in
-#                  Keychain item cos-claude-account-<id> (addons/account-add.sh); auto = least-loaded ok account.
-#                  Unconfigured → always a. The token is never written anywhere (only the id is).
-#   --continues OLD  continue OLD's work: its session file first (when current), else its transcript. Local only.
+#   --model        haiku|sonnet|opus (task `model:`; default opus).
+#   --continues OLD  continue OLD's work. Local only. CONTINUITY LADDER first (cheapest context wins):
+#                  OLD still LIVE → exit 6 "SendMessage it" (rung 1); OLD's last transcript turn (lib/lastturn.py)
+#                  < COS_CONTINUITY_MIN (50) min → exit 6 with the exact `spawn.sh --task-file … --resume <uuid>
+#                  --resume-prompt` command (rung 2). --fresh-ok overrides both with a WARN (a fresh context on purpose:
+#                  takeover, context full). FIRST STEP of the successor: a session file holding "Resume Here" written
+#                  after OLD's last turn (or current by the report-line test) → read it, never mine; OLD live without
+#                  one → ask OLD (SendMessage) for its Resume Here; only then the transcript. After launch OLD's task gets
+#                  `handoff: superseded by NAME`; `status: stopped` + `closed:` only when OLD is not live.
+#   --fresh-ok     see --continues. Without --continues (and no --resume), spawn WARNs when a same-topic task (same
+#                  first two name words after the machine, digits dropped, or named in the charter body) closed
+#                  < COS_CONTINUITY_MIN min ago — with its --resume command — or is live (SendMessage it).
 #   --resume UUID  reopen a STOPPED worker's own session with the same launch flags (keeps the prompt cache). Local only.
+#                  Needs --task-file. Transcript must sit under --dir's project slug (cwd is part of the cached
+#                  prompt) → else exit 2. Live process for that session id or name → exit 2 (stop it first).
+#                  Model: task `model:`, else the transcript's last assistant model (mismatch → WARN).
+#                  Idle gate: last user/assistant turn > 60 min ago → exit 5 (cache cold; use --continues instead);
+#                  --force overrides with a WARN.
+#   --resume-prompt TEXT  (with --resume only) the resumed session's first prompt, appended after `--resume UUID`
+#                  (a new turn after the cached context; flags unchanged, so the cache still holds). Plain --resume
+#                  sends no first prompt.
 #   --workspace REF  cmux launcher only: the workspace the pane opens in.
 # Launch-dir guard: --dir must be exactly one of $COS_LAUNCH_DIRS (colon-separated). --remote (add-on): --dir must
 #   match a LOCAL=REMOTE pair in $COS_REMOTE_LAUNCH_DIRS.
@@ -27,6 +43,16 @@
 # Goal gate: the charter carries `task goal:`, `done means:` and `parent goal: <ID>` (a `### <ID> · ` heading in
 #   $COS_GOALS, default $COS_DIR/GOALS.md). Missing task goal or unknown/parked parent → exit 2.
 # NAME convention: <machine>-<topic>[-<specifier>][-N], lowercase, hyphen-joined; machine = $COS_MACHINE_PREFIX.
+# Role: task `role:` (chief|builder|non-dev) wins; else chief when NAME is the CHIEF file's name for this machine or
+#   ends -chief; builder when --dir is under one of $COS_BUILDER_DIRS (colon list; empty = every dir); else non-dev.
+#   The first prompt carries one pointer line per section of references/worker-rules.md that applies to the role.
+# Prompt extension: $COS_WORKER_PROMPT_EXTRA is added to every first prompt (the user's own standing rules).
+# Env extension: $COS_SPAWN_ENV_CMD (optional, local workers) — a command the launch script runs at launch with
+#   the task file path and the worker name as arguments; each stdout line `KEY=VALUE` (KEY matching
+#   ^[A-Z_][A-Z0-9_]*$) is exported into the worker's environment. Other lines are ignored; values are never
+#   printed, logged or written to a file. A failing command → WARN, the worker starts without them.
+# Handover point: a new task file gets `handoff_at` from lib/handoff.py (role default); a value already set is kept.
+# Exit codes: 2 refused/bad input · 3 OFFLOAD (load gate) · 5 resume idle gate · 6 continuity ladder.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$HERE/cos-env.sh"
@@ -43,13 +69,14 @@ else
   devault() { printf '%s' "$1"; }
 fi
 
-TASKF= TCOLOR_OVR= MODEL_SET=0 NAME= DIR= MODEL=opus TASK= CHARTER= REMOTE=0 AGENT= DRY=0 NOGOAL=0 LIGHT=0 FORCE=0 STORYLIST= DEPS=() ACCT= ACCT_SET=0 CONT= PRED= PSESS= RESUME= MODEL_SRC=default CONT_WHY= WS_ARG="${COS_SPAWN_WORKSPACE:-}"
+TASKF= TCOLOR_OVR= MODEL_SET=0 NAME= DIR= MODEL=opus TASK= CHARTER= REMOTE=0 AGENT= DRY=0 NOGOAL=0 LIGHT=0 FORCE=0 STORYLIST= DEPS=() CONT= PRED= PSESS= RESUME= RESUME_PROMPT= FRESH_OK=0 PLIVE=0 SSTATE= MODEL_SRC=default CONT_WHY= WS_ARG="${COS_SPAWN_WORKSPACE:-}"
 while [ $# -gt 0 ]; do case "$1" in
   --name) NAME="$2"; shift 2;; --dir) DIR="$2"; shift 2;; --model) MODEL="$2"; MODEL_SET=1; MODEL_SRC=flag; shift 2;; --task-file) TASKF="$2"; shift 2;;
   --task) TASK="$2"; shift 2;; --charter) CHARTER="$2"; shift 2;; --remote) REMOTE=1; shift;;
   --agent) AGENT="$2"; shift 2;; --dry-run) DRY=1; shift;; --no-goal) NOGOAL=1; shift;;
   --depends-on) DEPS+=("$2"); shift 2;; --story-list) STORYLIST="$2"; shift 2;;
-  --light) LIGHT=1; shift;; --force) FORCE=1; shift;; --account) ACCT="$2"; ACCT_SET=1; shift 2;;
+  --light) LIGHT=1; shift;; --force) FORCE=1; shift;;
+  --resume-prompt) RESUME_PROMPT="$2"; shift 2;; --fresh-ok) FRESH_OK=1; shift;;
   --continues) CONT="$2"; shift 2;; --workspace) WS_ARG="$2"; shift 2;; --resume) RESUME="$2"; shift 2;;
   -h|--help) awk 'NR>1 && /^set -euo/ {exit} NR>1 {sub(/^# ?/, ""); print}' "$0"; exit 0;;
   *) echo "unknown arg $1" >&2; exit 2;; esac; done
@@ -61,7 +88,6 @@ if [ -n "$TASKF" ]; then
   [ -n "$DIR" ] || DIR=$(tget dir)
   [ "$MODEL_SET" = 1 ] || { m=$(tget model); [ -z "$m" ] || { MODEL="$m"; MODEL_SRC=task; }; }
   [ -n "$AGENT" ] || AGENT=$(tget agent)
-  [ "$ACCT_SET" = 1 ] || { ACCT=$(tget account); [ -z "$ACCT" ] || ACCT_SET=1; }
   [ -n "$STORYLIST" ] || STORYLIST=$(tget story_list)
   [ -n "$CONT" ] || [ -n "$RESUME" ] || CONT=$(tget continues)   # resume = the SAME session, no predecessor step
   TCOLOR_OVR=$(tget color)   # optional `color:` override for the pane colour (lib/pane-color.sh)
@@ -92,12 +118,13 @@ elif [ "${NAME%%-*}" != "$MACH_LOCAL" ]; then
   [ "$FORCE" = 1 ] || exit 2
 fi
 [ -z "$TASKF" ] || [ -z "$TTO" ] || [ "$TTO" = "${NAME%%-*}" ] || { echo "refuse: task $NAME is addressed to '$TTO', not this name's machine '${NAME%%-*}'" >&2; exit 2; }
+[ -z "$RESUME_PROMPT" ] || [ -n "$RESUME" ] || { echo "refuse: --resume-prompt needs --resume UUID" >&2; exit 2; }
 [ -n "$DIR" ] && [ -n "$CHARTER" ] && [ -f "$CHARTER" ] || { echo "need --dir and a charter/task file (--task-file F | --charter F)" >&2; exit 2; }
 # Resume — same session, same flags; anything that would change the cached prompt is refused or WARNed.
 RTRANS=
 if [ -n "$RESUME" ]; then
   [[ "$RESUME" =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]] || { echo "bad --resume '$RESUME' — a session uuid" >&2; exit 2; }
-  [ -n "$TASKF" ] || { echo "refuse: --resume needs --task-file tasks/<name>.md (model, dir, agent, account come from it)" >&2; exit 2; }
+  [ -n "$TASKF" ] || { echo "refuse: --resume needs --task-file tasks/<name>.md (model, dir, agent come from it)" >&2; exit 2; }
   [ "$REMOTE" = 0 ] || { echo "refuse: --resume is local only" >&2; exit 2; }
   [ -z "$CONT" ] || { echo "refuse: --resume and --continues don't mix — resume reopens the SAME session" >&2; exit 2; }
   RTRANS="$HOME/.claude/projects/$(printf '%s' "${DIR%/}" | tr '/.' '--')/$RESUME.jsonl"
@@ -107,6 +134,15 @@ if [ -n "$RESUME" ]; then
       || echo "refuse: transcript is $other, not under --dir $DIR's project — the session ran from another dir (cwd is part of the cached prompt); fix the task's dir:" >&2
     exit 2
   fi
+  # Idle gate — after 60 min the prompt cache is cold. Last user/assistant turn, not mtime.
+  RMT=$(cos_python "$HERE/lib/lastturn.py" "$RTRANS" 2>/dev/null | cut -d' ' -f1 || true)
+  if [[ "$RMT" =~ ^[0-9]+$ ]]; then
+    RIDLE=$(( ($(date +%s) - RMT) / 60 ))
+    if [ "$RIDLE" -gt 60 ]; then
+      if [ "$FORCE" = 1 ]; then echo "WARN: session idle $RIDLE min > 60 — cache cold, resume re-reads the whole context at full price (--force)" >&2
+      else echo "refuse: session idle $RIDLE min > 60 — cache cold; use --continues $NAME instead (or --force)" >&2; exit 5; fi
+    fi
+  else echo "WARN: cannot read last turn of $RTRANS — idle check skipped" >&2; fi
   TMODEL=$(cos_python - "$RTRANS" <<'PYM'
 import json, sys
 last = ""
@@ -119,16 +155,13 @@ for l in open(sys.argv[1], encoding="utf-8", errors="replace"):
 print(last)
 PYM
 )
-  case "$TMODEL" in *opus*) TALIAS=opus;; *sonnet*) TALIAS=sonnet;; *) TALIAS=;; esac
+  case "$TMODEL" in *opus*) TALIAS=opus;; *sonnet*) TALIAS=sonnet;; *haiku*) TALIAS=haiku;; *) TALIAS=;; esac
   if [ "$MODEL_SRC" = default ]; then
-    [ -n "$TALIAS" ] || { echo "refuse: task has no model: and the transcript's last model '${TMODEL:-none}' maps to no spawn alias (opus|sonnet) — set model: in the task file" >&2; exit 2; }
+    [ -n "$TALIAS" ] || { echo "refuse: task has no model: and the transcript's last model '${TMODEL:-none}' maps to no spawn alias (haiku|sonnet|opus) — set model: in the task file" >&2; exit 2; }
     MODEL="$TALIAS"; MODEL_SRC="transcript ($TMODEL)"
   elif [ -n "$TALIAS" ] && [ "$TALIAS" != "$MODEL" ]; then
     echo "WARN: resuming with --model $MODEL ($MODEL_SRC) but the transcript last ran $TMODEL — a model change re-reads the whole context (cache miss)" >&2
   fi
-  TACCT=$(tget account)
-  [ -n "$ACCT" ] && [ "$ACCT" != auto ] || { echo "refuse: --resume needs the session's own account — task has no account: and no --account given (auto/default could pick another login = cache miss)" >&2; exit 2; }
-  [ -z "$TACCT" ] || [ "$TACCT" = "$ACCT" ] || echo "WARN: account $ACCT differs from the task's account $TACCT — changing account loses the prompt cache; tell the owner first" >&2
   # Live check — one session, one process. Kill (stop.sh NAME) must come first.
   LIVE=$(cos_python - "$RESUME" "$NAME" <<'PYL'
 import glob, json, os, sys
@@ -146,7 +179,7 @@ PYL
   fi
   TASKP_RESUME="$TASKF"
 fi
-case "$MODEL" in sonnet|opus) ;; *) echo "model must be sonnet|opus" >&2; exit 2;; esac
+case "$MODEL" in haiku|sonnet|opus) ;; *) echo "model must be haiku|sonnet|opus" >&2; exit 2;; esac
 [ -z "$AGENT" ] || [[ "$AGENT" =~ ^[A-Za-z0-9._:-]+$ ]] || { echo "agent must be [A-Za-z0-9._:-]" >&2; exit 2; }
 AGENT_FLAG=; [ -n "$AGENT" ] && AGENT_FLAG="--agent $AGENT "
 for d in "${DEPS[@]+"${DEPS[@]}"}"; do [[ "$d" =~ ^[a-z](-[a-z0-9]+){1,3}$ ]] || { echo "bad --depends-on '$d' — a worker name" >&2; exit 2; }; done
@@ -174,31 +207,6 @@ else
     echo "  Launch from one of those; name the repo the worker works in inside the charter." >&2; exit 2; }
 fi
 
-# Account (add-on) — which Claude login the worker uses. Only the id is ever recorded; the token stays in the Keychain.
-ACCTS_ON=0; [ -n "${COS_DEFAULT_ACCOUNT:-}${COS_ACCOUNTS:-}" ] && ACCTS_ON=1
-[ -n "$ACCT" ] || ACCT="${COS_DEFAULT_ACCOUNT:-a}"   # (--resume refused an empty/auto account above)
-[[ "$ACCT" =~ ^([a-z][a-z0-9]{0,5}|auto)$ ]] || { echo "bad --account '$ACCT' — a, b, c… or auto" >&2; exit 2; }
-if [ "$REMOTE" = 1 ]; then
-  [ "$ACCT_SET" = 0 ] || echo "NOTE: --account ignored with --remote — the remote runner uses its own login" >&2
-  ACCT=remote
-elif [ "$ACCTS_ON" = 0 ]; then
-  [ "$ACCT" = a ] || echo "skip: accounts add-on not configured — using the default login (a)" >&2
-  ACCT=a
-else
-  if [ "$ACCT" = auto ]; then
-    ACCT=$("$HERE/addons/account-limit.sh" --pick) || { rc=$?; [ "$rc" = 4 ] && exit 4; echo "account-limit.sh --pick failed (exit $rc)" >&2; exit 1; }
-  else
-    "$HERE/addons/account-limit.sh" --show 2>/dev/null | awk -v a="$ACCT" '$1==a && $2=="limited" {f=1} END {exit !f}' \
-      && echo "WARN: account $ACCT is marked limited — starting anyway (you asked for it; auto would skip it)" >&2
-  fi
-  if [ "$ACCT" != a ] && [ "$COS_OS" != mac ]; then
-    echo "addon accounts: macOS only, skipping (account $ACCT → a)" >&2; ACCT=a
-  fi
-  if [ "$ACCT" != a ] && ! security find-generic-password -s "cos-claude-account-$ACCT" >/dev/null 2>&1; then
-    echo "refuse: no Keychain item cos-claude-account-$ACCT for account '$ACCT'." >&2
-    echo "  The owner runs once: $HERE/addons/account-add.sh $ACCT   (browser sign-in as that account; token captured, never shown)" >&2; exit 2
-  fi
-fi
 
 # Continuation — resolve the predecessor's transcript by its custom title (the claude -n name).
 find_pred() {   # newest transcript whose custom title is exactly $1, across --dir + every launch dir
@@ -266,15 +274,69 @@ if [ -n "$CONT" ]; then
   [ "$CONT" != "$NAME" ] || { echo "refuse: --continues names this worker itself — give the successor a new name (e.g. $NAME-2)" >&2; exit 2; }
   [ "$REMOTE" = 0 ] || { echo "refuse: --continues is local only — the remote runner cannot read this machine's transcript" >&2; exit 2; }
   IFS=$'\t' read -r SSTATE SWHY PSESS <<< "$(find_sess "$CONT")"
+  # Continuity ladder — live → SendMessage; last turn < COS_CONTINUITY_MIN → --resume; else a fresh successor.
+  CMIN="${COS_CONTINUITY_MIN:-50}"
+  PTRANS=$(find_pred "$CONT"); PLAST=; PIDLE=
+  [ -z "$PTRANS" ] || PLAST=$(cos_python "$HERE/lib/lastturn.py" "$PTRANS" 2>/dev/null | cut -d' ' -f1 || true)
+  [[ "$PLAST" =~ ^[0-9]+$ ]] && PIDLE=$(( ($(date +%s) - PLAST) / 60 )) || PLAST=
+  PTASK=; for f in "$COS_DIR/tasks/$CONT.md" "$COS_DIR/_archive/tasks/$CONT.md"; do [ -f "$f" ] && { PTASK="$f"; break; }; done
+  # the predecessor's latest HANDOFF report line should carry refs: — WARN only
+  [ -z "$PTASK" ] || cos_python - "$PTASK" <<'PYH' || true
+import re, sys
+L = open(sys.argv[1], encoding="utf-8", errors="ignore").read().split("\n")
+h = [i for i, l in enumerate(L) if re.search(r"status:\s*\**\s*HANDOFF\b", l)]
+if h and not re.search(r"(?<![\w-])refs:\s*\S", "\n".join(L[h[-1]:])):
+    print("WARN: predecessor HANDOFF line in %s has no refs: — the successor's first step gets its lessons into the reference docs and reports refs:" % sys.argv[1], file=sys.stderr)
+PYH
+  "$HERE/sessions.sh" --tsv 2>/dev/null | awk -F'\t' -v n="$CONT" '$1=="live" && $2==n {f=1} END {exit !f}' && PLIVE=1
+  RESUME_CMD="$HERE/spawn.sh --task-file $(printf '%q' "${PTASK:-$COS_DIR/tasks/$CONT.md}") --resume $(basename "${PTRANS:-<uuid>}" .jsonl) --resume-prompt '<the new ask>'"
+  if [ "$PLIVE" = 1 ]; then LADDER="$CONT is LIVE — rung 1: SendMessage $CONT the new ask (zero new context)"
+  elif [ -n "$PIDLE" ] && [ "$PIDLE" -lt "$CMIN" ]; then LADDER="$CONT's last turn was $PIDLE min ago (< $CMIN, cache warm) — rung 2: $RESUME_CMD"
+  else LADDER=; fi
+  if [ -n "$LADDER" ]; then
+    if [ "$FRESH_OK" = 1 ]; then echo "WARN: $LADDER — spawning a fresh successor anyway (--fresh-ok)" >&2
+    else echo "refuse: $LADDER. A fresh context on purpose (takeover, context full) → add --fresh-ok." >&2; exit 6; fi
+  fi
+  # FIRST STEP: Resume Here written after the last turn → read it; live predecessor → ask it; transcript last.
+  if [ -n "$PSESS" ] && grep -q 'Resume Here' "$PSESS" 2>/dev/null && { [ -z "$PLAST" ] || [ "$(cos_mtime "$PSESS")" -ge "$PLAST" ]; }; then
+    SSTATE=current; SWHY="Resume Here in $PSESS written after $CONT's last turn"
+  fi
   if [ "$SSTATE" = current ]; then
     CONT_WHY="session file (current) — $SWHY"
+  elif [ "$PLIVE" = 1 ]; then
+    CONT_WHY="ask the LIVE predecessor (SendMessage) for its Resume Here — never mine a live session ($SWHY)"
   else
-    PRED=$(find_pred "$CONT")
+    PRED="$PTRANS"
     if [ -n "$PRED" ]; then CONT_WHY="transcript — $SWHY"; PSESS=
     elif [ "$SSTATE" = stale ]; then CONT_WHY="session file (STALE, no transcript found) — $SWHY"
       echo "WARN: no transcript for $CONT — using the stale session file; the worker must reconcile git carefully" >&2
     else echo "refuse: no current session file ($SWHY) and no transcript with \"customTitle\":\"$CONT\" under ~/.claude/projects/<launch-dir slug>/ — check the old worker's exact name (sessions.sh, LEDGER)" >&2; exit 2; fi
   fi
+elif [ -z "$RESUME" ] && [ "$REMOTE" = 0 ]; then
+  # Same-topic check — no --continues: a same-topic task closed < COS_CONTINUITY_MIN ago should be resumed, a live one messaged.
+  LIVEN=$("$HERE/sessions.sh" --tsv 2>/dev/null | awk -F'\t' '$1=="live" {printf "%s ", $2}' || true)
+  while IFS=$'\t' read -r ON OMIN OTASK; do
+    [ -n "$ON" ] || continue
+    if [ "${ON%%-*}" != "${COS_PREFIX:-}" ]; then echo "same-topic $ON on machine ${ON%%-*}: not this machine, no resume" >&2; continue; fi
+    if [ "$OMIN" = live ]; then echo "WARN: same-topic $ON is LIVE — rung 1: SendMessage $ON instead of a new worker (or --continues $ON)" >&2
+    else OT=$(find_pred "$ON"); echo "WARN: same-topic $ON closed $OMIN min ago (cache warm) — rung 2: $HERE/spawn.sh --task-file $(printf '%q' "$OTASK") --resume $(basename "${OT:-<uuid>}" .jsonl) --resume-prompt '<the new ask>'" >&2; fi
+  done < <(cos_python - "$COS_DIR" "$NAME" "$CHARTER" "${COS_CONTINUITY_MIN:-50}" "${LIVEN:-}" <<'PYT'
+import glob, os, re, sys, time
+cos, name, charter, cmin, live = sys.argv[1], sys.argv[2], sys.argv[3], int(sys.argv[4]), set(sys.argv[5].split())
+now = time.time()
+def topic(n): return "-".join([w for w in n.split("-")[1:] if not re.fullmatch(r"\d+", w)][:2])
+body = open(charter, encoding="utf-8", errors="replace").read()
+if body.startswith("---\n"): body = body.split("\n---", 1)[-1]   # body only — frontmatter from:/continues: name the chief
+for f in glob.glob(os.path.join(glob.escape(cos), "tasks", "*.md")):
+    o = os.path.basename(f)[:-3]
+    if o == name or not (topic(o) == topic(name) or re.search(rf"(?<![\w-]){re.escape(o)}(?![\w-])", body)): continue
+    fm = open(f, encoding="utf-8", errors="replace").read().split("\n---", 1)[0]
+    m = re.search(r"^closed:\s*\"?(\d{4}-\d{2}-\d{2} \d{2}:\d{2})", fm, re.M)
+    c = time.mktime(time.strptime(m.group(1), "%Y-%m-%d %H:%M")) if m else None
+    if o in live: print(f"{o}\tlive\t{f}")
+    elif c is not None and 0 <= now - c < cmin * 60: print(f"{o}\t{int((now - c) // 60)}\t{f}")
+PYT
+)
 fi
 
 # Load gate — local only (the remote has its own session cap).
@@ -357,32 +419,6 @@ DIR_SAFE="$(devault "$DIR")"
 DEST_CHARTER_SAFE="$(devault "$DEST_CHARTER")"
 INBOX_SAFE="$(devault "$INBOX")"
 MISSION_SAFE="$(devault "$MISSION")"
-# Mission file — the machine-readable plan (schema 1). One build slice when a story list is linked.
-write_mission() {
-  cos_python - "$1" "$NAME" "$TGOAL" "$TDONE" "$GOAL" "$STORYLIST" "$ACCT" "$CONT" "$PRED" "$PSESS" "${DEPS[@]+"${DEPS[@]}"}" <<'PY3'
-import json, sys, datetime as dt
-out, name, tg, td, goal, sl, acct, cont, pred, psess, *deps = sys.argv[1:]
-q = json.dumps
-L = ["# Mission file — chief-of-staff schema 1 (references/orchestration.md → Mission file).",
-     "# Written by spawn.sh from the charter header. next.sh reads it every 20 min → NEXT.md. Edit slices as the plan changes.",
-     "schema: 1", f"worker: {name}", f"task_goal: {q(tg, ensure_ascii=False)}", f"done_means: {q(td, ensure_ascii=False)}",
-     f"parent_goal: {goal}", f"account: {acct}              # Claude login id (a = default Keychain login); never a token",
-     *([f"continues: {cont}"] if cont else []),
-     *([f"predecessor_session: {json.dumps(psess)}"] if cont and psess else []),
-     *([f"predecessor_transcript: {json.dumps(pred)}"] if cont and pred else []),
-     "status: active            # active | done | parked | stopped",
-     f"charter: charters/{name}.md", f"inbox: inbox/{name}.md", "heartbeat_min: 60", f"created: {dt.date.today()}",
-     "depends_on_missions: [" + ", ".join(deps) + "]",
-     "# asks: → block list, appended by the worker to ask the owner (class TEST|DECIDE|APPROVE); next.sh shows open ones",
-     "#   as 'Needs you' at the top of NEXT.md. Schema: references/orchestration.md → Asks.", "slices:"]
-if sl:
-    L += ["  - id: build", "    title: stories code-complete", "    status: active", f"    owner: {name}", "    depends_on: []",
-          f"    story_list: {q(sl)}"]
-else:
-    L += ["  - id: task", "    title: task goal met (done means)", "    status: active", f"    owner: {name}", "    depends_on: []"]
-open(out, "w", encoding="utf-8").write("\n".join(L) + "\n")
-PY3
-}
 NEWM=0; [ -f "$TASKP" ] || NEWM=1
 # Task file: create it from the charter (legacy --charter), or take the given/queued one; then stamp the spawn fields.
 write_task() {   # write_task FILE — FILE ends up a complete task file for this spawn (status claimed until launched)
@@ -391,12 +427,20 @@ write_task() {   # write_task FILE — FILE ends up a complete task file for thi
   elif [ -z "$TASKF" ] && ! [ -f "$f" ]; then cos_python "$TPY" new "$f" --name "$NAME" --to "${NAME%%-*}" --from "${COS_FROM:-chief}" --status claimed --charter "$CHARTER"; fi
   local deps="[$(IFS=,; echo "${DEPS[*]+"${DEPS[*]}"}" | sed 's/,/, /g')]"
   cos_python "$TPY" set "$f" to "${NAME%%-*}" parent_goal "$GOAL" task_goal "$TGOAL" done_means "$TDONE" model "$MODEL" dir "$DIR" \
-    account "$ACCT" depends_on_missions "$deps" heartbeat_min "${COS_HEARTBEAT_MIN:-60}" status claimed
+    depends_on_missions "$deps" heartbeat_min "${COS_HEARTBEAT_MIN:-60}" status claimed
   [ -z "$AGENT" ] || cos_python "$TPY" set "$f" agent "$AGENT"
   [ -z "$STORYLIST" ] || cos_python "$TPY" set "$f" story_list "$STORYLIST"
   [ -z "$CONT" ] || cos_python "$TPY" set "$f" continues "$CONT"
   [ -z "$CONT" ] || [ -z "$PSESS" ] || cos_python "$TPY" set "$f" predecessor_session "$PSESS"
   [ -z "$CONT" ] || [ -z "$PRED" ] || cos_python "$TPY" set "$f" predecessor_transcript "$PRED"
+  # Handover point (lib/handoff.py): the role default for an empty one; a value already set (by the chief) is kept.
+  if [ -f "$HERE/lib/handoff.py" ]; then
+    if [ -z "$(cos_python "$TPY" get "$f" handoff_at 2>/dev/null)" ]; then
+      HAT=$(cos_python "$HERE/lib/handoff.py" default "$NAME" "$f" 2>/dev/null || true)
+      [ -z "$HAT" ] || cos_python "$TPY" set "$f" handoff_at "$HAT" handoff_r ""
+    elif [ -n "$CONT" ]; then cos_python "$TPY" set "$f" handoff_r ""   # a successor keeps the point, re-measures its own R
+    fi
+  fi
 }
 if [ "$DRY" = 0 ] && [ -z "$RESUME" ]; then mkdir -p "$COS_DIR/tasks"; write_task "$TASKP"; fi
 # Set top-level keys in a mission file (replace in place, else insert after parent_goal:). Values are JSON-quoted
@@ -423,12 +467,45 @@ dry_goal() {
   echo "DRY-RUN parent: [$GTAG] · inbox tag: $ITAG · ledger: [$GTAG] $TG60"
   [ -z "$CONT" ] || { echo "DRY-RUN continues: $CONT · FIRST STEP path = $CONT_WHY"
     echo "DRY-RUN predecessor session file: ${PSESS:-none} · predecessor transcript: ${PRED:-none (not mined)}"
-    echo "DRY-RUN after spawn: missions/$CONT.yaml → status: stopped, handoff: \"superseded by $NAME\"$([ -f "$COS_DIR/missions/$CONT.yaml" ] || echo ' (no such mission file — skipped)')"; }
-  echo "DRY-RUN account: $ACCT$([ "$ACCT" = a ] && echo ' (default Keychain login)')$([ "$ACCT" != a ] && [ "$ACCT" != remote ] && echo " (Keychain item cos-claude-account-$ACCT, read at launch)")"
+    echo "DRY-RUN after spawn: tasks/$CONT.md → handoff: \"superseded by $NAME\"$([ "$PLIVE" = 1 ] && echo ' (live: status kept until its HANDOFF line)' || echo ', status: stopped')"; }
   echo "DRY-RUN prompt goal block: $GOAL_PROMPT"
   T=$(mktemp -d)/$NAME.md; [ ! -f "$TASKP" ] || cp "$TASKP" "$T"; write_task "$T"
   echo "DRY-RUN task file $TASKP$([ "$NEWM" = 0 ] && echo ' (exists — fields re-stamped)'):"; awk 'NR==1 || !/^---$/ {print} /^---$/ && NR>1 {print; exit}' "$T" | sed 's/^/  /'; rm -f "$T"
 }
+# Role — task role: wins; else chief (CHIEF file name for this machine / *-chief), builder (dir under COS_BUILDER_DIRS), non-dev.
+CHIEF_NAME=$(awk -v p="$COS_PREFIX" '/^[[:space:]]*#/||NF==0{next} $1==p":" {print $2; f=1; exit} first=="" && $1 !~ /:$/ {first=$1} END{ if(!f && first!="") print first }' "$COS_DIR/CHIEF" 2>/dev/null || true)
+ROLE=$( { [ ! -f "$TASKP" ] || cos_python "$TPY" get "$TASKP" role; } 2>/dev/null || true)
+[ -n "$ROLE" ] || [ -z "$TASKF" ] || ROLE=$(cos_python "$TPY" get "$TASKF" role 2>/dev/null || true)
+case "$ROLE" in chief|builder|non-dev) ;; *)
+  ROLE=non-dev
+  case "$NAME" in *-chief|*-chief-*) ROLE=chief;; *)
+    if [ -n "$CHIEF_NAME" ] && [ "$NAME" = "$CHIEF_NAME" ]; then ROLE=chief
+    elif [ -z "${COS_BUILDER_DIRS:-}" ]; then ROLE=builder
+    else IFS=: read -r -a _bd <<< "$COS_BUILDER_DIRS"
+      for b in "${_bd[@]}"; do [ -n "$b" ] || continue; case "${DIR%/}/" in "${b%/}/"*) ROLE=builder;; esac; done
+    fi;;
+  esac;;
+esac
+# Rulebook: one pointer line per section of references/worker-rules.md that applies to ROLE.
+WR="$(dirname "$HERE")/references/worker-rules.md"
+WR_SAFE="$(devault "$WR")"
+RULES_PROMPT="RULEBOOK: $WR_SAFE (role: $ROLE). Each line below is a rule in short; read its § section when it applies."
+RULES_PROMPT="$RULES_PROMPT ROLES (§ Roles): you are a $ROLE worker; stay inside your task."
+RULES_PROMPT="$RULES_PROMPT ASKS (§ Asks and the NEEDS YOU banner): ask the owner only via the asks: block of your task file; a turn that ends blocked on the owner ends with the NEEDS YOU banner."
+RULES_PROMPT="$RULES_PROMPT AUTONOMY (§ Autonomy): decide two-way doors yourself; ask only for one-way doors."
+RULES_PROMPT="$RULES_PROMPT SPEED (§ Speed and the remote machine): parallel lanes for independent work, batch tool calls; heavy commands on the remote machine when configured; a status line every 30 min."
+RULES_PROMPT="$RULES_PROMPT NO OVERDOING (§ No overdoing): do only what the next step of your goal needs; green stays green."
+[ "$ROLE" != builder ] || RULES_PROMPT="$RULES_PROMPT TEST TIERS (§ Test tiers): one quick proof per change is the default; full regression only where the section says."
+RULES_PROMPT="$RULES_PROMPT SUBAGENTS (§ Subagents): every brief has a wall-clock budget and returns partial at it; subagents never wait on deploys or locks."
+RULES_PROMPT="$RULES_PROMPT KB FIRST (§ KB first): search the project's docs and knowledge base before calling anything new."
+RULES_PROMPT="$RULES_PROMPT MESSAGING (§ Messaging): SendMessage to a session by name, never type into a pane.${CHIEF_NAME:+ Chief: $CHIEF_NAME.}"
+[ "$ROLE" != builder ] || RULES_PROMPT="$RULES_PROMPT RELEASE (§ Release): never merge to the release branches or deploy yourself; follow the section."
+[ "$ROLE" = chief ] || RULES_PROMPT="$RULES_PROMPT DOMAIN LEADS (§ Domain leads): work in a domain that has a lead needs the lead's approval first."
+[ "$ROLE" != builder ] || RULES_PROMPT="$RULES_PROMPT LIMITS (§ Limits): any new or changed limit follows the section."
+RULES_PROMPT="$RULES_PROMPT CONTEXT (§ Context size and handover): hand over near your task's handoff_at; never mid-step."
+RULES_PROMPT="$RULES_PROMPT HOOK-BLOCKED (§ Hook-blocked commands): a hook refusal is a rule, not an obstacle; use the way it names."
+RULES_PROMPT="$RULES_PROMPT WIND-DOWN (§ Wind-down and teardown): only when the whole task is finished."
+[ -f "$WR" ] || RULES_PROMPT=
 TAIL_PROMPT="Only when your whole task is finished (you report DONE, or the owner signs off or says stop) — never mid-task — run /agent-ops:session-update to write or update your session file (what changed, where it lives, how to resume) and put its path in your report line."
 TEARDOWN_PROMPT="TEARDOWN at DONE: before your DONE report, stop every dev server/background process you started; for EVERY git worktree you created: make sure its branch is committed + pushed (or merged), then \`git worktree remove <path>\` (no --force; dirty → report it, never force); KEEP all branches; run \`git worktree prune\` in each repo you touched. Put a line in your report: \`teardown: N worktrees removed, M kept (why)\` — stop.sh refuses DONE without it."
 STYLE_PROMPT="Style: concise. Report lines are one line each: verdict, evidence, what is next. No recaps, no filler. Never print secrets (keys, tokens, passwords) in tool output or reports."
@@ -449,23 +526,35 @@ if [ "$REMOTE" = 0 ]; then
   CMD="cd $(printf '%q' "$DIR_SAFE") && bash $(printf '%q' "$LAUNCH"); exec \"\$SHELL\" -l"
   ASK_PROMPT="To ask the owner anything (TEST / DECIDE / APPROVE), append an item to the asks: block in the frontmatter of your task file (format: references/orchestration.md → Asks) and name it in a report line; check the charter's Pre-authorized list first — those need no ask. Never edit any other frontmatter key."
   CONT_PROMPT=
-  if [ -n "$CONT" ] && [ -z "$PRED" ]; then
+  if [ -n "$CONT" ] && [ "$PLIVE" = 1 ] && [ "$SSTATE" != current ]; then
+    CONT_PROMPT="MANDATORY FIRST STEP — you continue worker $CONT, which is still live. Before any build: SendMessage $CONT for its Resume Here (state, open items, next step); never mine a live session's transcript; reconcile with git in every repo it names; post one report line; only then continue. "
+  elif [ -n "$CONT" ] && [ -z "$PRED" ]; then
     CONT_PROMPT="MANDATORY FIRST STEP — you continue worker $CONT. Before any build: read its session file $(devault "$PSESS") (the Resume Here block first); reconcile with git in every repo it names; post one report line; only then continue. Do NOT mine the old transcript — $([ "$SSTATE" = current ] && echo 'the session file is current' || echo 'none was found; the session file is STALE, so treat git as the truth where they differ'). "
   elif [ -n "$CONT" ]; then
     CONT_PROMPT="MANDATORY FIRST STEP — you continue worker $CONT. Before any build: have a sonnet subagent run /agent-ops:session-from-transcript on the old transcript $PRED to write a session file with a Resume Here block; re-read it; reconcile with git in every repo; post one report line; only then continue. "
   fi
-  # Resume: no first prompt — the session already has it; same flags otherwise (cache = model+effort+flags+account).
+  # Resume: no first prompt — the session already has it; same flags otherwise (cache = model+effort+flags).
   LAST_ARGS="--resume $RESUME"
-  [ -n "$RESUME" ] || PROMPT="$STYLE_PROMPT ${EXTRA_PROMPT}You are a worker session spawned by the chief of staff. ${CONT_PROMPT}Your task file: $DEST_CHARTER_SAFE — its body is your charter; do it. Report ONLY by appending lines under \`## Reports\` at the end of that same file (format in the charter → Report protocol). Plain text in this terminal never reaches the chief. When the owner gives you new direction directly in this terminal, follow it and add a one-line note under \`## Reports\` so the chief sees it. $GOAL_PROMPT $ASK_PROMPT $TEARDOWN_PROMPT $TAIL_PROMPT"
+  # --resume-prompt: one new turn after the cached context (vault paths aliased like every other argv).
+  if [ -n "$RESUME_PROMPT" ]; then
+    RESUME_PROMPT_SAFE="$RESUME_PROMPT"; [ -z "${COS_VAULT:-}" ] || RESUME_PROMPT_SAFE="${RESUME_PROMPT_SAFE//"$COS_VAULT"/$VAULT_ALIAS}"
+    LAST_ARGS="--resume $RESUME $(printf '%q' "$RESUME_PROMPT_SAFE")"
+  fi
+  [ -n "$RESUME" ] || PROMPT="$STYLE_PROMPT ${EXTRA_PROMPT}You are a worker session spawned by the chief of staff (role: $ROLE). ${CONT_PROMPT}Your task file: $DEST_CHARTER_SAFE — its body is your charter; do it. Report ONLY by appending lines under \`## Reports\` at the end of that same file (format in the charter → Report protocol). Plain text in this terminal never reaches the chief. When the owner gives you new direction directly in this terminal, follow it and add a one-line note under \`## Reports\` so the chief sees it. $GOAL_PROMPT $ASK_PROMPT ${RULES_PROMPT:+$RULES_PROMPT }$TEARDOWN_PROMPT $TAIL_PROMPT"
   [ -n "$RESUME" ] || LAST_ARGS=$(printf '%q' "$PROMPT")
-  RC_FLAG=; [ "${COS_REMOTE_CONTROL:-0}" = 1 ] && [ "$ACCT" = a ] && RC_FLAG="--remote-control "
-  ACCT_LINES="# account a: the default Claude login"
-  if [ "$ACCT" != a ]; then
-    RC_FLAG=   # Remote Control refuses long-lived (inference-only) tokens
-    ACCT_LINES="# account $ACCT: token read from Keychain item cos-claude-account-$ACCT at launch (never stored here)
-T=\$(/usr/bin/security find-generic-password -s cos-claude-account-$ACCT -w 2>/dev/null) && [ -n \"\$T\" ] || { echo \"no Keychain item cos-claude-account-$ACCT — run addons/account-add.sh $ACCT\"; exit 2; }
-export CLAUDE_CODE_OAUTH_TOKEN=\"\$T\"; unset T
-export COS_CLAUDE_ACCOUNT_ID=$ACCT"
+  RC_FLAG=; [ "${COS_REMOTE_CONTROL:-0}" = 1 ] && RC_FLAG="--remote-control "
+  ENV_LINES=
+  if [ -n "${COS_SPAWN_ENV_CMD:-}" ]; then
+    ENV_LINES=$(cat <<L
+# COS_SPAWN_ENV_CMD: KEY=VALUE lines exported for this worker (values never printed, logged or stored)
+COS_ENV_OUT=\$(bash -c $(printf '%q' "$COS_SPAWN_ENV_CMD \"\$@\"") _ $(printf '%q' "$TASKP") $(printf '%q' "$NAME") 2>/dev/null) || { echo "WARN: COS_SPAWN_ENV_CMD failed — starting without its environment" >&2; COS_ENV_OUT=; }
+while IFS= read -r COS_ENV_L; do
+  COS_ENV_K="\${COS_ENV_L%%=*}"
+  [ "\$COS_ENV_K" != "\$COS_ENV_L" ] && [[ "\$COS_ENV_K" =~ ^[A-Z_][A-Z0-9_]*\$ ]] && export "\$COS_ENV_K=\${COS_ENV_L#*=}"
+done <<< "\$COS_ENV_OUT"
+unset COS_ENV_OUT COS_ENV_L COS_ENV_K
+L
+)
   fi
   CMUX_LINES=
   if [ "$COS_LAUNCHER" = cmux ]; then
@@ -491,7 +580,7 @@ for v in \$(env | grep -iE "^(CLAUDE|AI_AGENT)" | cut -d= -f1); do unset "\$v"; 
 cd $(printf '%q' "$DIR") || { echo $(printf '%q' "cd failed: $DIR"); exit 2; }
 COS_CMUX_ARGS=()
 $CMUX_LINES
-$ACCT_LINES
+$ENV_LINES
 # worker hooks: cos-heartbeat touches the heartbeat file, cos-ck answers the check-in ping
 export COS_WORKER=$NAME COS_TAG=$(printf '%q' "$ITAG") COS_REPORT_FILE=$(printf '%q' "$INBOX_SAFE") COS_HEARTBEAT_DIR=$(printf '%q' "$(devault "$COS_DIR")/.heartbeat")
 exec $(printf '%q' "$CLAUDE_BIN") "\${COS_CMUX_ARGS[@]+"\${COS_CMUX_ARGS[@]}"}" ${RC_FLAG}-n $(printf '%q' "$NAME") --model $MODEL ${AGENT_FLAG}--effort high ${DISALLOW_FLAG}${EXTRA_FLAGS}$LAST_ARGS
@@ -521,8 +610,8 @@ L
   if [ "$DRY" = 1 ]; then
     if [ -n "$RESUME" ]; then
       echo "DRY-RUN resume: session $RESUME · transcript $RTRANS"
-      echo "DRY-RUN resume: model $MODEL ($MODEL_SRC) · effort high · account $ACCT$([ -n "${TACCT:-}" ] && echo " (task: $TACCT)") · agent ${AGENT:-none} · no first prompt"
-    else dry_goal; fi
+      echo "DRY-RUN resume: model $MODEL ($MODEL_SRC) · effort high · agent ${AGENT:-none} · $([ -n "$RESUME_PROMPT" ] && echo "first prompt (--resume-prompt): $RESUME_PROMPT" || echo "no first prompt")"
+    else dry_goal; echo "DRY-RUN role: $ROLE · first prompt ${#PROMPT} chars"; fi
     case "$COS_LAUNCHER" in
       cmux)
         if [ -n "$WS" ]; then . "$HERE/addons/lib/cmux-equalize.sh"; GRID_PLAN=; [ "${COS_LAYOUT:-row}" = grid ] && GRID_PLAN=$(cos_grid_plan "$WS")
@@ -540,15 +629,16 @@ L
     exit 0
   fi
   mkdir -p "$LAUNCH_DIR"
-  if [ -n "$RESUME" ]; then cos_python "$TPY" report "$TASKP" "status: RESUMED $STAMP session $RESUME (spawn.sh --resume: model $MODEL, effort high, account $ACCT)"
+  if [ -n "$RESUME" ]; then cos_python "$TPY" report "$TASKP" "status: RESUMED $STAMP session $RESUME (spawn.sh --resume: model $MODEL, effort high)"
   else cos_python "$TPY" report "$TASKP" "status: STARTED $STAMP"; fi
   printf '%s\n' "$LAUNCH_BODY" > "$LAUNCH"
   chmod +x "$LAUNCH"
   case "$COS_LAUNCHER" in
     cmux)
+      . "$HERE/addons/lib/cmux-equalize.sh"; FSNAP=$(cos_focus_snap)   # focus guard: what the owner sees before any create
       if [ -n "$WS" ]; then
         # Grid decided BEFORE the pane exists; never move a surface afterwards (that wipes scrollback).
-        . "$HERE/addons/lib/cmux-equalize.sh"; GRID_PLAN=; [ "${COS_LAYOUT:-row}" = grid ] && GRID_PLAN=$(cos_grid_plan "$WS"); out=
+        GRID_PLAN=; [ "${COS_LAYOUT:-row}" = grid ] && GRID_PLAN=$(cos_grid_plan "$WS"); out=
         if [ -n "$GRID_PLAN" ]; then
           out=$("$CM" new-split "${GRID_PLAN#* }" --surface "${GRID_PLAN% *}" --workspace "$WS" --command "$CMD" --focus false 2>&1) \
             || { echo "WARN: new-split ${GRID_PLAN#* } of ${GRID_PLAN% *} failed ($out) — using new-pane default" >&2; out=; }
@@ -560,8 +650,10 @@ L
         "$CM" tab-action --action rename --workspace "$WS" --surface "$SURF" --title "$NAME" >/dev/null 2>&1 \
           || echo "WARN: could not rename tab $SURF to $NAME" >&2
         WHERE="cmux ws${WS#workspace:}/$SURF"
-        [ -z "$PCOLOR" ] || cos_send_pane_color "$CM" "$WS" "$SURF" "$PCOLOR"
+        [ -z "$PCOLOR" ] || cos_send_pane_color "$CM" "$WS" "$SURF" "$PCOLOR" "$FSNAP"
+        cos_focus_keep "$FSNAP" "$WS" "$SURF" new-pane
         cos_equalize "$WS"
+        cos_focus_keep "$FSNAP" "$WS" "$SURF" equalize
       else
         echo "WARN: no cmux workspace titled \"${COS_CMUX_WORKSPACE_TITLE:-chief}\" — falling back to a NEW workspace" >&2
         "$CM" workspace create --name "$NAME" --cwd "$DIR" --command "$CMD" --focus false
@@ -634,26 +726,18 @@ L
   WHERE="remote:$COS_REMOTE_HOST_KEY/tmux:$NAME"
 fi
 
-# LEDGER has an `account` column after `status`; 7-cell rows without it stay readable (account blank = a).
-LEDGER="$COS_DIR/LEDGER.md"
-if [ -f "$LEDGER" ] && grep -qxF '| started | name | where | model | task | charter | status |' "$LEDGER"; then
-  cos_python - "$LEDGER" <<'PY5'
-import sys
-p = sys.argv[1]; s = open(p, encoding="utf-8").read()
-s = s.replace("| started | name | where | model | task | charter | status |\n|---|---|---|---|---|---|---|",
-              "| started | name | where | model | task | charter | status | account |\n|---|---|---|---|---|---|---|---|", 1)
-open(p, "w", encoding="utf-8").write(s)
-PY5
-fi
 # The task file is the ledger row (no LEDGER.md append).
 if [ -n "$RESUME" ]; then cos_python "$TPY" set "$TASKP" status running where "$WHERE" resumed "$STAMP"
-  echo "OK resumed $NAME session $RESUME ($WHERE, $MODEL, effort high, account $ACCT${AGENT:+, agent $AGENT}) — task file: $TASKP"; exit 0; fi
-cos_python "$TPY" set "$TASKP" status running where "$WHERE" started "$STAMP" account "$ACCT" model "$MODEL"
+  echo "OK resumed $NAME session $RESUME ($WHERE, $MODEL, effort high${AGENT:+, agent $AGENT}) — task file: $TASKP"; exit 0; fi
+cos_python "$TPY" set "$TASKP" status running where "$WHERE" started "$STAMP" model "$MODEL" role "$ROLE"
 [ "$REMOTE" = 0 ] || cos_python "$TPY" report "$TASKP" "status: STARTED $STAMP (remote — reports land in ~/cos/inbox/$NAME.md; collect.sh merges them here)"
 # Predecessor superseded — only now that the successor is running.
 if [ -n "$CONT" ]; then
-  if [ -f "$COS_DIR/tasks/$CONT.md" ]; then cos_python "$TPY" set "$COS_DIR/tasks/$CONT.md" status stopped handoff "superseded by $NAME" closed "$STAMP"
-    echo "task $CONT → status: stopped, handoff: superseded by $NAME" >&2
+  if [ -f "$COS_DIR/tasks/$CONT.md" ]; then
+    if [ "$PLIVE" = 1 ]; then cos_python "$TPY" set "$COS_DIR/tasks/$CONT.md" handoff "superseded by $NAME"
+      echo "task $CONT → handoff: superseded by $NAME (live: status kept until its HANDOFF line)" >&2
+    else cos_python "$TPY" set "$COS_DIR/tasks/$CONT.md" status stopped handoff "superseded by $NAME" closed "$STAMP"
+      echo "task $CONT → status: stopped, handoff: superseded by $NAME" >&2; fi
   elif [ -f "$COS_DIR/missions/$CONT.yaml" ]; then mset "$COS_DIR/missions/$CONT.yaml" status stopped handoff "superseded by $NAME"
     echo "mission $CONT → status: stopped, handoff: superseded by $NAME" >&2
   else echo "WARN: no missions/$CONT.yaml to mark superseded" >&2; fi
@@ -661,4 +745,4 @@ if [ -n "$CONT" ]; then
     && echo "WARN: $CONT still has a live session — stop it (stop.sh $CONT) once $NAME has posted its first inbox line" >&2
 fi
 [ "$REMOTE" = 0 ] || INBOX="$DEST:~/cos/inbox/$NAME.md (collect.sh pulls it to $INBOX)"
-echo "OK spawned $NAME ($WHERE, $MODEL, account $ACCT${AGENT:+, agent $AGENT}, parent [$GTAG]) — task goal: $TGOAL — task file: $TASKP"
+echo "OK spawned $NAME ($WHERE, $MODEL, role $ROLE${AGENT:+, agent $AGENT}, parent [$GTAG]) — task goal: $TGOAL — task file: $TASKP"

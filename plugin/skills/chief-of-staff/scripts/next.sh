@@ -9,8 +9,11 @@
 #                          With the optional Hermes add-on, stdout goes to chat (e.g. Telegram).
 #   next.sh --src NAME     label the daemon.log line (default: manual)
 #   next.sh --no-queue     skip queue-run.sh (default: run it first, so queued tasks spawn every 20 min)
+# Order of one run: queue-run.sh → reap.sh (stop.sh DONE|PARKED for live workers that report it, every gate, never
+#   --force; --alert prints only NEW refusals; off: COS_REAP=0) → asks.py sweep (close asks of closed/superseded tasks,
+#   run each ask's `check:`, so "Needs you" shows only asks still true; off: COS_ASK_SWEEP=0) → plan.
 # Tasks: tasks/<name>.md frontmatter is read exactly like a mission file (a task overrides a same-name
-#   mission); its `## Reports` lines are its inbox; its status/where/account replace the LEDGER row. Open tasks
+#   mission); its `## Reports` lines are its inbox; its status/where replace the LEDGER row. Open tasks
 #   addressed to this machine show as "Queue". The run stamps `- <prefix> next.sh: …` under STATE.md → Last verified.
 # NEXT.md opens with "⛔ Needs you": every open ask from every mission's `asks:` block, sorted
 #   TEST → APPROVE → DECIDE. An ask waiting > $COS_PARK_MIN min (default 50) shows 💤 — park that worker.
@@ -25,6 +28,9 @@
 #   NEXT.md (compat). A non-host machine with 0 own mission files writes nothing and says why (exit 0).
 # Stale state: LEDGER STARTED rows whose mission is closed, asks open > 1 day; host block also flags
 #   goals still `confirm?` and the brief check — same ONE Thing 3 briefs in a row, or its parent goal `done`.
+# Dead-man: every run touches $COS_DIR/_heartbeat.<prefix>. The host, with --alert, pages once per stale stamp for
+#   each machine prefix in $COS_DEADMAN_PREFIXES (default empty = off) whose stamp is missing or older than
+#   $COS_DEADMAN_MIN (40) min, inside $COS_DEADMAN_HOURS (8-22, local hours).
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$HERE/cos-env.sh"
@@ -35,8 +41,14 @@ while [ $# -gt 0 ]; do case "$1" in
 mkdir -p "$COS_DIR/missions"
 # The queue first: open tasks addressed to this machine get claimed + spawned (queue-run.sh prints only changes).
 [ "$QUEUE" = 0 ] || [ "${COS_QUEUE:-1}" = 0 ] || "$HERE/queue-run.sh" 2>/dev/null || true
+# Then the reaper: closes live workers that report DONE/PARKED (reap.sh keeps every stop.sh gate). Off: COS_REAP=0.
+[ "${COS_REAP:-1}" = 0 ] || [ ! -x "$HERE/reap.sh" ] || "$HERE/reap.sh" $([ "$ALERT" = 1 ] && echo --alert) 2>/dev/null || true
+# Asks freshness: close asks of closed/superseded tasks + run each ask's `check:` before planning. Off: COS_ASK_SWEEP=0.
+[ "${COS_ASK_SWEEP:-1}" = 0 ] || [ ! -f "$HERE/asks.py" ] || cos_python "$HERE/asks.py" sweep >/dev/null 2>&1 || true
+touch "$COS_DIR/_heartbeat.$COS_PREFIX" 2>/dev/null || true   # dead-man stamp of this machine
 SESS=$("$HERE/sessions.sh" --tsv 2>/dev/null || true)
 export COS_LIB="$HERE/lib"
+export COS_DEADMAN_PREFIXES="${COS_DEADMAN_PREFIXES:-}" COS_DEADMAN_MIN="${COS_DEADMAN_MIN:-40}" COS_DEADMAN_HOURS="${COS_DEADMAN_HOURS:-8-22}"
 export COS_REMOTE_MACHINE_PREFIX="${COS_REMOTE_MACHINE_PREFIX:-}" COS_GOALS="${COS_GOALS:-$COS_DIR/GOALS.md}" COS_OUTSTANDING="${COS_OUTSTANDING:-}"
 cos_python - "$COS_DIR" "$ALERT" "$SRC" "$SESS" <<'PY'
 import json, os, re, sys, glob, datetime as dt
@@ -133,8 +145,8 @@ if os.path.exists(lp):
     for l in open(lp, encoding="utf-8", errors="ignore"):
         c = [x.strip() for x in l.strip().strip("|").split("|")]
         if len(c) >= 7 and re.match(r"\d{4}-\d\d-\d\d", c[0]):
-            new = len(c) >= 8 and re.fullmatch(r"[a-z][a-z0-9]{0,5}", c[7] or "") is not None   # 0.9.0 account column
-            ledger[c[1]] = {"where": c[2], "status": (c[6] if new else " ".join(c[6:])).strip(), "account": c[7] if new else None}
+            new = len(c) >= 8 and re.fullmatch(r"[a-z][a-z0-9]{0,5}", c[7] or "") is not None   # legacy 8-column row
+            ledger[c[1]] = {"where": c[2], "status": (c[6] if new else " ".join(c[6:])).strip()}
 live = {}
 for l in sess.splitlines()[1:]:
     p = l.split("\t")   # sessions.sh --tsv: full name
@@ -179,7 +191,7 @@ for tp, fm in T.list_tasks(cosdir):   # task files — override same-name missio
     fm["status"] = {"claimed": "active", "running": "active", "failed": "stopped"}.get(st, st)
     missions[w] = fm
     if fm.get("where") or fm.get("started"):
-        ledger[w] = {"where": str(fm.get("where") or ""), "status": st, "account": fm.get("account")}
+        ledger[w] = {"where": str(fm.get("where") or ""), "status": st}
 all_missions = missions
 missions = {w: m for w, m in all_missions.items() if own(w)}
 if not missions and not broken and not IS_HOST:
@@ -195,7 +207,7 @@ for w, m in missions.items():
     ib = inbox_state(os.path.join(cosdir, m.get("inbox") or f"inbox/{w}.md"))
     led = ledger.get(w, {})
     r = {"w": w, "goal": m.get("parent_goal") or "?", "task": m.get("task_goal") or "—", "reasons": [], "kind": "ok",
-         "mstatus": str(m.get("status") or "active").lower(), "acct": led.get("account") or m.get("account")}
+         "mstatus": str(m.get("status") or "active").lower()}
     # slices (status derived from story_list when linked)
     slices = list(m.get("slices") or [])
     if not slices and m.get("story_list"):
@@ -345,7 +357,7 @@ if asks:
 L += ["| Worker | Task goal | Now | Next | Blocked by |", "|---|---|---|---|---|"]
 for r in act:
     b = "**" if r["kind"] in ("died", "blocked") else ""
-    cells = [f"{r['w']} [{r['goal']}]" + (f" ·{r['acct']}" if r.get("acct") else ""), short(r["task"], 70), short(r["now"], 150), short(r["next"], 120), short("; ".join(r["reasons"]) or "—", 160)]
+    cells = [f"{r['w']} [{r['goal']}]", short(r["task"], 70), short(r["now"], 150), short(r["next"], 120), short("; ".join(r["reasons"]) or "—", 160)]
     L.append("| " + " | ".join(f"{b}{c}{b}" if c and c != "—" else c for c in cells) + " |")
 if not act: L.append("| — | no active missions | — | — | — |")
 for e in broken: L.append(f"\n⚠ mission file broken: `{e}`")
@@ -398,6 +410,23 @@ if alert:
     if broken:
         cur_state["_broken"] = broken
         if prev.get("_broken") != broken: out.append("⚠ chief plan daemon: mission file broken — " + "; ".join(broken))
+    if IS_HOST and os.environ.get("COS_DEADMAN_PREFIXES", "").strip():   # dead-man: page once per stale stamp
+        dm_min = int(os.environ.get("COS_DEADMAN_MIN") or 40)
+        try: h0, h1 = (int(x) for x in (os.environ.get("COS_DEADMAN_HOURS") or "8-22").split("-"))
+        except ValueError: h0, h1 = 8, 22
+        hb_prev, hb_cur = prev.get("_hb") or {}, {}
+        for p in os.environ["COS_DEADMAN_PREFIXES"].split():
+            f = os.path.join(cosdir, f"_heartbeat.{p}")
+            mt = os.path.getmtime(f) if os.path.exists(f) else None
+            if mt is not None and (now.timestamp() - mt) / 60 <= dm_min: continue
+            key = str(int(mt)) if mt else "missing"
+            hb_cur[p] = key
+            if h0 <= now.hour < h1 and hb_prev.get(p) != key:
+                last = dt.datetime.fromtimestamp(mt).strftime("last %H:%M") if mt else "never stamped"
+                out.append(f"💀 chief {p} down — no next.sh stamp > {dm_min}m ({last}); its scheduler gone? restart it on that machine")
+            elif hb_prev.get(p) == key: pass
+            else: hb_cur.pop(p)   # off-hours: page when hours open
+        cur_state["_hb"] = hb_cur
     if out: out.append(f"→ NEXT.md {now:%H:%M}")
     json.dump(cur_state, open(sp + ".tmp", "w")); os.replace(sp + ".tmp", sp)
 summary = f"{'FAIL' if broken else 'ok'} src={src} prefix={PFX}{'(host)' if IS_HOST else ''} stale_state={len(stale_st)} queued={len(queue)} missions={len(rows)} active={len(act)} blocked_or_died={len(bad)} stale={len(stale)} asks={len(asks)} alerts={max(len(out) - 1, 0)}"

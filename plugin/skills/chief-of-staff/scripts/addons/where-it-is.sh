@@ -4,10 +4,12 @@
 #   items: [{id, title, jira, worker, date, note?, repos: [{repo, path?, branch, commits: [hash…]}]}]
 #   commits = the WORK commits (feature branch / develop merge) — never the main-merge commit (it is not on develop).
 # Per commit: Local = object exists locally · Pushed = on an origin/* branch (`branch -r --contains`)
-#   · Dev = in origin/develop · Prod = in origin/<main|master|production|prod>.
-#   Not contained → same subject on that branch (squash/cherry-pick) = "≈". Revert of it on the branch = note.
+#   · Dev = in origin/develop (ancestry; not contained → same subject = "≈"; a revert on develop = note)
+#   · Prod = CONTENT: every file the commit touches has its change in origin/<main|master|…>'s copy
+#     (lib/prodcontent.py). Never ancestry: hold-out cuts revert work on main while the commits stay in
+#     main's history, so "is commit X on main" reports held work as shipped. "≈" = file changed since — confirm.
 # Item cell = the WEAKEST of its commits (✅ > ≈ > ✗). No commits = "?" (hash unknown).
-# Read-only on every repo (git fetch + log/branch/merge-base only). Git refs only — not what a host runs.
+# Read-only on every repo (git fetch, log/branch/diff/ls-tree, apply --check into a temp index). Git only — not what a host runs.
 #   where-it-is.sh                 markdown table, gaps first
 #   where-it-is.sh --json          JSON instead
 #   where-it-is.sh --no-fetch      skip the fetch (stamped "stale refs")
@@ -27,7 +29,7 @@ while [ $# -gt 0 ]; do
     --no-fetch) FETCH=0; shift ;;
     --item) ITEM="${2:-}"; shift 2 ;;
     --file) FILE="${2:-}"; shift 2 ;;
-    -h|--help) sed -n '2,18p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
     *) echo "where-it-is: unknown arg $1" >&2; exit 2 ;;
   esac
 done
@@ -35,6 +37,7 @@ done
 
 cos_python - "$FILE" "$JSON" "$FETCH" "$ITEM" "${COS_MONOREPO:-}" "${COS_REPO_PATHS:-}" "$COS_DIR" "$HERE/../lib" <<'PY'
 import sys, os, re, json, subprocess, datetime as dt
+sys.path.insert(0, sys.argv[8]); import prodcontent as PC
 try:
     import yaml
 except ImportError:
@@ -67,7 +70,21 @@ def repo_info(p):
     if git(p, "rev-parse", "-q", "--verify", "refs/remotes/origin/develop")[0] == 0: info["dev"] = "origin/develop"
     for b in ("main", "master", "production", "prod"):
         if git(p, "rev-parse", "-q", "--verify", f"refs/remotes/origin/{b}")[0] == 0: info["prod"] = f"origin/{b}"; break
+    info["pc"] = PC.Repo(p, info["prod"], info["dev"]) if info["prod"] else None
     repos[p] = info; return info
+
+def on_prod(p, sha, info):
+    """Prod by CONTENT: ✅ every touched file has the change · ✗ held · ≈ changed since — confirm · n/a no prod branch."""
+    if not info["pc"]: return "n/a", None, []
+    sym, files = info["pc"].commit_on_prod(sha)
+    held = [f for f, s_, _ in files if s_ == "✗"]
+    more = " …" if len(held) > 3 else ""
+    note, br = None, info["prod"].split("/", 1)[1]
+    if held and git(p, "merge-base", "--is-ancestor", sha, info["prod"])[0] == 0:
+        note = f"HELD: in {br} history but content not there ({', '.join(held[:3])}{more})"
+    elif held:
+        note = f"content missing on {br}: {', '.join(held[:3])}{more}"
+    return sym, note, files
 
 def on_branch(p, sha, subj, when, br):
     """✅ contained · ≈ same subject after the commit (squash/cherry-pick) · ✗ · n/a no such branch."""
@@ -94,7 +111,12 @@ def weakest(cells):
 rows = []
 for it in items:
     cols = {"mac": [], "pushed": [], "dev": [], "prod": []}; notes = []; detail = []
-    for e in it.get("repos") or []:
+    rl = it.get("repos") or []
+    if isinstance(rl, dict):   # map form `repos: {<repo>: {branch, commits}}` → list form
+        rl = [{"repo": k, **(v if isinstance(v, dict) else {})} for k, v in rl.items()]
+    for e in rl:
+        if not isinstance(e, dict):   # `repos: [<repo>]` — a bare name, no commits to check
+            notes.append(f"{e}: no commits listed in shipped.yaml"); continue
         p = resolve(e); name = os.path.basename(e.get("repo", p).rstrip("/")); info = repo_info(p)
         if not info["ok"]:
             notes.append(f"{name}: {info['note']}"); continue
@@ -110,13 +132,14 @@ for it in items:
             rc, rb = git(p, "branch", "-r", "--contains", sha, "--list", "origin/*")
             pushed = "✅" if rb.strip() else "✗"
             dsym, dnote = on_branch(p, sha, subj, when, info["dev"])
-            psym, pnote = on_branch(p, sha, subj, when, info["prod"])
+            psym, pnote, pfiles = on_prod(p, sha, info)
             if pushed == "✗" and "≈" in (dsym, psym): pushed = "≈"
             cols["mac"].append(("✅", name)); cols["pushed"].append((pushed, name))
             cols["dev"].append((dsym, name)); cols["prod"].append((psym, name))
             for n in (dnote, pnote):
                 if n and f"{name} {h}: {n}" not in notes: notes.append(f"{name} {h}: {n}")
-            detail.append({"repo": name, "commit": h, "found": True, "subject": subj, "pushed": pushed, "dev": dsym, "prod": psym})
+            detail.append({"repo": name, "commit": h, "found": True, "subject": subj, "pushed": pushed, "dev": dsym, "prod": psym,
+                           "prod_files": [{"path": f, "state": s_, "why": w} for f, s_, w in pfiles]})
     c = {k: weakest(v) for k, v in cols.items()}
     if it.get("note"): notes.insert(0, str(it["note"]))
     first = lambda s: s.split(" ")[0]
@@ -128,6 +151,7 @@ for it in items:
     elif "≈" in (first(c["dev"]), first(c["prod"])): gap, order = "≈ by subject — confirm", 5
     else: gap, order = "on prod", 6
     if any("reverted" in n for n in notes): gap += " · REVERTED"
+    if any("HELD:" in n for n in notes): gap += " · HELD on main"
     rows.append({"id": it.get("id"), "title": it.get("title") or it.get("id"), "jira": it.get("jira") or "none",
                  "date": str(it.get("date") or ""), **c, "gap": gap, "order": order, "notes": notes, "commits": detail})
 rows.sort(key=lambda r: (r["order"], r["date"]))
@@ -145,9 +169,12 @@ cnt = Counter(r["gap"].split(" · ")[0] for r in rows)
 print("\n" + " · ".join(f"{k}: {v}" for k, v in sorted(cnt.items(), key=lambda kv: min(r["order"] for r in rows if r["gap"].startswith(kv[0])))))
 rn = sorted({f"{os.path.basename(p)}: {i['note']}" for p, i in repos.items() if i["ok"] and i["note"]})
 if rn and fetch: print("Repo warnings: " + "; ".join(rn))
-print("Dev = origin/develop, Prod = origin/main (git only — no live build marker checked). "
-      "✅ contained · ≈ same subject found (squash/cherry-pick — confirm) · ✗ not there · n/a repo has no develop · ? no hash in shipped.yaml. "
+print("Dev = in origin/develop (ancestry). Prod = CONTENT of origin/main: each file the commit touches carries its change "
+      "(never commit ancestry — hold-out reverts keep held commits in main's history). No live build marker checked. "
+      "✅ there · ≈ dev: same subject / prod: file changed since — confirm · ✗ not there · n/a no such branch · ? no hash in shipped.yaml. "
       "Mixed repos name the weakest.")
+for i in repos.values():
+    if i.get("pc"): i["pc"].close()
 # Tasks: 🔨 = running now; ⚠ = a done task whose `shipped:` report names an item missing from the registry.
 if not only:
     sys.path.insert(0, sys.argv[8]); import tasks as T
