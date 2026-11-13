@@ -74,6 +74,46 @@ check allow "runner timeout 3s → allow"   "$REPO" "pnpm build" COS_MINI_RUN_BI
 # Not configured (no remote runner, no scope root) → hook is inert
 check allow "unconfigured → inert"         "$REPO" "pnpm build" -u COS_HEAVY_GUARD_ROOT -u COS_MINI_RUN_BIN AGENT_OPS_CONFIG=/nonexistent
 
+# --- mini-run probe: a busy remote is not a down remote. Full mini-run runs against a fake ssh on PATH that
+# fails its first $FAKE_FAIL calls (exit 255, like a connect timeout), then answers. Past the probe the fake refuses
+# the lock (LOCKFAIL → exit 90), so "used the remote" = exit 90 + no local marker; "ran locally" = the marker exists.
+MR="$HERE/../skills/chief-of-staff/scripts/addons/mini-run.sh"
+FB="$T/fakebin"; mkdir -p "$FB" "$T/mhome" "$T/mono/repo"
+cat > "$FB/ssh" <<'FAKE'
+#!/bin/bash
+n=$(( $(cat "$FAKE_CNT" 2>/dev/null || echo 0) + 1 )); echo $n > "$FAKE_CNT"
+[ "$n" -le "${FAKE_FAIL:-0}" ] && { echo "ssh: connect to host x port 22: Operation timed out" >&2; exit 255; }
+last=${!#}
+case "$last" in true) exit 0;; *"mini-run-remote status"*) echo "no locks held"; exit 0;; *) echo "LOCKFAIL fake"; exit 95;; esac
+FAKE
+chmod +x "$FB/ssh"
+printf '#!/bin/bash\nexit 0\n' > "$FB/mini-ip-follow.sh"; chmod +x "$FB/mini-ip-follow.sh"
+git -C "$T/mono/repo" init -q 2>/dev/null; echo '{}' > "$T/mono/repo/package.json"
+# mr <name> <want-rc> <want: remote|local> <fake-fail> [env...] -- runs mini-run once from the temp repo
+mr() {
+  local name=$1 wrc=$2 where=$3 ff=$4; shift 4; rm -f "$T/ran-local" "$T/cnt"
+  out=$(cd "$T/mono/repo" && env PATH="$FB:$PATH" HOME="$T/mhome" AGENT_OPS_CONFIG=/nonexistent MINI_RUN_HOST=fake@remote \
+    COS_REMOTE_LAUNCH_DIRS="$T/mono=code/mono" MINI_RUN_PROBE_PAUSE=0 FAKE_CNT="$T/cnt" FAKE_FAIL=$ff \
+    "$@" bash "$MR" --no-deps "touch $T/ran-local" 2>&1); rc=$?
+  local got=remote; [ -f "$T/ran-local" ] && got=local
+  if [ "$rc" = "$wrc" ] && [ "$got" = "$where" ]; then PASS=$((PASS+1)); printf 'ok   probe %s\n' "$name"
+  else FAIL=$((FAIL+1)); printf 'FAIL probe %s: want rc %s %s, got rc %s %s\n     out: %s\n' "$name" "$wrc" "$where" "$rc" "$got" "$out"; fi
+}
+mr "answers 1st try → remote"               90 remote 0
+mr "fails 2, answers 3rd → remote, not local" 90 remote 2
+case "$out" in *"answered on probe 3/3"*) PASS=$((PASS+1)); echo "ok   probe says busy-not-down";; *) FAIL=$((FAIL+1)); echo "FAIL probe message: $out";; esac
+mr "fails all 3 → local fallback"           0  local 3
+mr "fails 4 of TRIES=5 → remote"            90 remote 4 MINI_RUN_PROBE_TRIES=5
+mr "fails all, NO_LOCAL=1 → exit 90, no local" 90 remote 9 MINI_RUN_NO_LOCAL=1
+case "$out" in *"unreachable"*"MINI_RUN_NO_LOCAL=1"*) PASS=$((PASS+1)); echo "ok   probe NO_LOCAL message";; *) FAIL=$((FAIL+1)); echo "FAIL NO_LOCAL message: $out";; esac
+# --status: retried on ssh 255, never runs anything locally
+st() { local name=$1 wrc=$2 ff=$3; rm -f "$T/cnt"
+  out=$(cd "$T/mono/repo" && env PATH="$FB:$PATH" HOME="$T/mhome" AGENT_OPS_CONFIG=/nonexistent MINI_RUN_HOST=fake@remote \
+    MINI_RUN_PROBE_PAUSE=0 FAKE_CNT="$T/cnt" FAKE_FAIL=$ff bash "$MR" --status 2>&1); rc=$?
+  if [ "$rc" = "$wrc" ]; then PASS=$((PASS+1)); printf 'ok   status %s\n' "$name"; else FAIL=$((FAIL+1)); printf 'FAIL status %s: want rc %s got %s: %s\n' "$name" "$wrc" "$rc" "$out"; fi; }
+st "fails 2, answers 3rd → 0" 0 2
+st "fails all 3 → 255, nothing local" 255 3
+
 echo "---"
 echo "$PASS passed, $FAIL failed"
 [ "$FAIL" = 0 ]
