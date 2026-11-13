@@ -223,7 +223,9 @@ of the feature still passes. Measure first: check where real traffic goes before
 Every new or changed rate limit, concurrency cap, timeout, retry cap, truncation or fallback timer needs a row in
 the project's limits document (if the project keeps one), and a limit that fires logs on the user's row or job.
 A limit never cuts what an agent can see (instructions, loaded skill text, tool history, context); tune it only for
-money, rate or safety. Reviewers block a diff that adds a limit without a row. Commit the row in the same step you
+money, rate or safety. Before removing or resizing a limit, read in the code what happens to the part over it: dropped, refused, or stored and
+readable. Stored and readable is design: keep it. A removal never tightens: the new bound is today's ceiling or higher
+for every case, and the request notes that line per row. Reviewers block a diff that adds a limit without a row. Commit the row in the same step you
 write it. A limits file many sessions edit is synced with `shared-checkout-sync.md`, never read-modify-written.
 
 ## Secrets in files
