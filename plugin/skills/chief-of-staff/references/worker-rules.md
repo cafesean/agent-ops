@@ -320,6 +320,8 @@ A Bash call that a hook blocks runs nothing. Re-run the parts that were not bloc
 
 - zsh does not word-split `$VAR`: use an array (`H=(a b c); for h in $H`). A command held in a variable is an array
   (`cmd=(tool sub …)`, run `"${cmd[@]}"`), never a string.
+- zsh expands a word that starts with `=` as a command path: `echo ======` fails and stops a `;` chain. Quote it
+  (`echo '====='`) or use `---`.
 - zsh reads `$var:x` as a history modifier (`:s`, `:h`, `:t`, `:r`, `:e`): `git show $b:src/f.ts` breaks. Brace and
   quote: `git show "${b}:src/f.ts"`.
 - Monitor runs in zsh: put a watch loop in a file and run it with `/bin/bash <file>`.
