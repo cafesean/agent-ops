@@ -16,6 +16,7 @@
 # Default 50, not 60: a ping at idle 59-60 lands past the 1 h prompt cache and re-reads the whole context cold.
 # BLOCKED workers ARE pinged: a worker waiting on the owner keeps its cache warm, so the answer lands on a warm session.
 # DONE/PARKED workers are pinged until 60 min after their DONE/PARKED report (`skip done-1h`); reap.sh closes them.
+# A worker whose successor task (`continues: <worker>`) is running is never pinged (`skip superseded`).
 # A task with `no_ping: true` is never pinged (a session that has its own wait loop as heartbeat).
 # The cos-ck hook turns the 5-character ping into the 3-line protocol (protocols/ck.md). Print launcher:
 # workers have no pane the chief can type into — they are listed, never pinged.
@@ -44,6 +45,7 @@ for l in sess.splitlines()[1:]:
     p = l.split("\t")   # sessions.sh --tsv: full name (the padded table cut it at 22 chars)
     if len(p) >= 5 and p[0] == "live": live[p[1]] = int(p[4]) if p[4].lstrip("-").isdigit() else -1
 rows = {}   # worker -> (where, status, report file)
+superseded = set()   # workers whose running successor (task `continues:`) owns the line
 lp = os.path.join(cosdir, "LEDGER.md")
 if os.path.exists(lp):
     for l in open(lp, encoding="utf-8", errors="ignore"):
@@ -58,6 +60,7 @@ for f in glob.glob(os.path.join(cosdir, "tasks", "*.md")):   # task files overri
             if l == "---": break
             m = re.match(r"([\w-]+):\s*(.*)", l)
             if m: fm[m.group(1)] = m.group(2).strip().strip("\"'")
+    if fm.get("continues") and re.match(r"(STARTED|WORKING|BLOCKED|running|claimed)\b", fm.get("status", ""), re.I): superseded.add(fm["continues"])
     last = [l for l in lines if l.startswith("status: ")]
     done_since = None   # stamp of the first line of the trailing DONE*/PARKED run
     for l in reversed(last):
@@ -77,6 +80,7 @@ for w, (where, st, rep, noping, done_since) in sorted(rows.items()):
     m = re.search(r"ws(\d+)/(surface:\d+)", where)
     tm = re.match(r"tmux (\S+)", where)
     if noping: act = "skip-noping"
+    elif w in superseded: act = "skip-superseded"
     elif quiet <= silent: act = "ok"
     elif done_since == -1: act = "skip-parked"
     elif done_since is not None and now - done_since >= 3600: act = "skip-done-1h"
@@ -102,6 +106,7 @@ while IFS=$'\t' read -r act w quiet idle ws surf; do
     ok) echo "ok    $w (heard ${quiet}m ago)";;
     skip-noping) echo "skip  $w — no_ping: true";;
     skip-done-1h) echo "skip  $w — DONE/PARKED >= 60 min ago: no ping, reap.sh closes it";;
+    skip-superseded) echo "skip  $w — a running successor owns this line: no ping, no wake";;
     skip-parked) echo "skip  $w — PARKED: no ping; the worker stays parked until its owner resumes it";;
     skip-idle) echo "skip  $w — idle ${idle}m > ${MAXIDLE}m: never re-message; chief decides (stop + --continues successor)";;
     *) echo "skip  $w — $act (silent ${quiet}m)";;
