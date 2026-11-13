@@ -207,7 +207,10 @@ check `sessions.sh --tsv` (live row + pid) or the CHIEF / CAPTAIN / LEADS files.
 With 2+ builders live, builders never merge the shared branches and never deploy: one release owner session does
 (SKILL.md → *Critical rules*). Every release request carries `kb: <doc>` or `kb: none-found (<query>)`, plus the
 `local:` line from *Test tiers*. Release mechanics (request format, trains, one shared-branch merge per batch) live
-in the project's own runbook; changes to a plugin repo go branch → tests → version bump → review → merge.
+in the project's own runbook; changes to a plugin repo go branch → tests → version bump → review → merge. A public plugin repo
+(agent-ops is one) publishes on ANY push, a feature branch included: before the first push grep the diff
+(`git diff origin/main | grep '^+'`) for session names, hosts, accounts, paths and tokens, and use generic names in
+test fixtures.
 Agent or bot configuration that runs in prod follows the same one-way-door rule as a deploy: a lock row, an undo,
 one proof turn.
 
