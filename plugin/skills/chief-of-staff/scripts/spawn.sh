@@ -371,7 +371,9 @@ if [ -z "$GOAL" ]; then
   echo "refuse: charter $CHARTER has no 'parent goal: <ID>' line (legacy 'goal: <ID>' also accepted)." >&2
   echo "  IDs are the '### <ID> · ' headings in $GOALS. Serving none: write 'parent goal: none' and pass --no-goal." >&2; exit 2
 fi
-[ -n "$TDONE" ] || { echo "WARN: charter has no 'done means:' line — the worker gets no concrete finish check" >&2; TDONE="—"; }
+# No body line: keep the frontmatter done_means (never overwrite it with the placeholder).
+[ -n "$TDONE" ] || TDONE=$(sed -nE 's/^done_means:[[:space:]]*"?(.*[^"])"?[[:space:]]*$/\1/p' "$CHARTER" | head -1)
+[ -n "$TDONE" ] && [ "$TDONE" != "—" ] || { echo "WARN: charter has no 'done means:' line — the worker gets no concrete finish check" >&2; TDONE="—"; }
 # short slug of the task goal for inbox tags: first 4 content words, hyphen-joined
 TSLUG=$(printf '%s' "$TGOAL" | tr 'A-Z' 'a-z' | tr -cs 'a-z0-9' ' ' | tr ' ' '\n' \
   | grep -vxE '(a|an|the|and|or|of|to|for|in|on|at|by|from|with|his|her|own|so|can|every|all|it|its|is|are|be|that|this|through|via|them|they)?' \
