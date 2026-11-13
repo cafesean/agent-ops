@@ -230,6 +230,12 @@ and it gets a roster row the same turn. Tests and evals run as the lane owner's 
 over keeps the lane: successor `--continues`, roster row updated. A builder that finds an issue outside its lane
 sends it to the lead, never fixes it or spawns for it.
 
+**Topic journal.** Each lead keeps `$COS_DIR/teams/<domain>-topics.md`: at most 10 open problems, each with name, every
+user quote on it (with time), current understanding (cause, evidence, ids), owner session, next step, status and
+`updated HH:MM`. The lead updates a topic in the same turn the user says anything on it and at every handover; repeated
+asks (raised 2+ times) fold into topics, one-off directions close in the line record. The successor reads it FIRST and
+teaches it back.
+
 **Lead rules.** Before approving a change, the lead checks which goal the change serves and that every entry path
 of the feature still passes. Measure first: check where real traffic goes before choosing what to fix.
 
