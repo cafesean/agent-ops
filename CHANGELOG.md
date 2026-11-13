@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+- Hooks: new `destroy-guard` (PreToolUse Bash, through cos-py.sh): denies an HTTP DELETE to a guarded route (`COS_DESTROY_HTTP_ROUTES`, default public cloud API hosts) or a cloud CLI destroy verb unless the command carries `# user-named-go: <resource id> <the user's words>` naming that id with a go verb. Kill switch `COS_DESTROY_GUARD=0`. Rule added to SKILL.md Critical rules and worker-rules § Autonomy: destroy needs the user's named go; intent is never the go.
+- Chief of staff, cmux launcher: workspace routing in spawn.sh. Task `title:` names the tab; task `workspace_title:` puts the pane in that workspace (created on first use from the ref `workspace create` returns, placeholder closed after the worker pane exists); a chief task goes to `COS_CHIEF_WORKSPACE_TITLE` (default CHIEF); new `COS_CMUX_WORKSPACE_ROUTES` (`PATTERN=TITLE;…`, case-insensitive glob on "<name> <category> <lane>", existing workspaces only); then the pin and `COS_CMUX_WORKSPACE_TITLE` as before. Workspace titles now match case-insensitively; an empty `cmux tree --all` is retried once; `--dry-run` prints the rule that picked the workspace.
+
 ## 0.8.2
 - Chief of staff, cmux launcher: `COS_CMUX_TMUX=1` runs each worker's claude in its own tmux session (named after the worker; `COS_TMUX_SOCKET`, new `COS_TMUX_BIN`) and the cmux pane only attaches, so workers survive quitting or restarting cmux. spawn.sh refuses a name whose session already exists and `--dry-run` prints both steps; `where:` gets a `/tmux:<name>` suffix; stop.sh reads the screen from and kills that session, then closes the pane. Re-opening attach panes after a cmux restart is left to a user-layer script.
 - Hooks: `cos-reap` is also registered on SessionEnd, so a worker that exits right after DONE or PARKED is still reaped; a SessionEnd for /clear or resume does nothing.

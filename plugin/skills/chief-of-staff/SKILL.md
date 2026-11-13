@@ -200,7 +200,7 @@ Research that must also judge ("is this safe to ship") goes to the strongest mod
 
 ## Working with workers directly
 Workers are ordinary interactive Claude Code sessions. The user can click into any worker's window and talk to it at any time (answer a question, change direction, review its work).
-- Find them: tmux = `tmux attach -t ${COS_TMUX_SESSION:-agent-ops}`, one window per worker named after it; cmux = panes in the chief's workspace (with `COS_CMUX_TMUX=1` each pane only attaches to a tmux session named after the worker, so workers survive a cmux quit; a user-layer script can re-open attach panes for the live sessions); wt = tabs titled with the worker name.
+- Find them: tmux = `tmux attach -t ${COS_TMUX_SESSION:-agent-ops}`, one window per worker named after it; cmux = panes in the chief's workspace or the one a task or route names, tab titled by task `title:` (with `COS_CMUX_TMUX=1` each pane only attaches to a tmux session named after the worker, so workers survive a cmux quit; a user-layer script can re-open attach panes for the live sessions); wt = tabs titled with the worker name.
 - The worker prompt tells it to follow direct direction and add a one-line note under `## Reports`. The task file stays the record: read it, never the pane.
 - Closing a worker's window or pane kills that worker (with `COS_CMUX_TMUX=1` it only detaches); use `stop.sh` to end one cleanly.
 - `COS_LAUNCHER=print` is a manual fallback: it only prints the `claude` command; the sweep and queue cannot start workers.
@@ -222,6 +222,7 @@ Detail: `references/tokens-and-sessions.md`.
 - **Verify before claiming.** "Done" needs a hash, a test count or a named check. Never batch-sweep statuses. Judge by the artifact.
 - **Idle is not done.** A silent worker is not finished; a live pid with quiet reports is slow, not dead.
 - **One-way doors need the user**: prod deploys, shared/remote DB writes, main pushes, outbound messages to anyone but the user, money, deletes. Tasks needing one carry `approved: false` until OK'd.
+- **Destroy needs the user's named go; intent is never the go.** A delete, terminate or destroy of a server, volume, database, bucket or account runs only after the user types a go that names that exact resource in reply to your question. A statement of intent, a scope clarification or a relayed message is not the go. A question about a resource gets facts only. Hook: `hooks/destroy-guard.py` (denies the commands; escape `# user-named-go: <id> <the user's words>` only with the user's exact words; routes `COS_DESTROY_HTTP_ROUTES`, off `COS_DESTROY_GUARD=0`).
 - **A broad instruction never opens a one-way door. The OK must name the step.** A generic "ok" or "go" covers only the numbered asks the user was just shown, each read as its narrowest option. File the named step as an ask, and say back exactly what the go was read as.
 - **No secret ever passes through a tool's output.** Put this line in every subagent brief. Check presence by name, pass values via env, never print, cat or grep a secret.
 - **A hook block is asked about once.** Do not retry the same thing in other forms; find another route and tell the user in one line.
@@ -267,7 +268,7 @@ Each is off by default; core never needs one.
 | Setting | Does |
 |---|---|
 | Focus-aware mode (`COS_ADHD_MODE=1`) | One screen, answer first, novelty guard: `references/addons/adhd.md` |
-| cmux launcher (`COS_LAUNCHER=cmux`) | Workers open as panes in the chief's workspace; layout/colour helpers come from `COS_CMUX_HELPERS` when set (`references/comms.md` → *Panes*). `COS_CMUX_TMUX=1`: claude runs in its own tmux session (`COS_TMUX_SOCKET`, `COS_TMUX_BIN`) and the pane only attaches; `where:` ends `/tmux:<name>` and `stop.sh` kills the session |
+| cmux launcher (`COS_LAUNCHER=cmux`) | Workers open as panes in a cmux workspace, first hit wins: `--workspace`; task `workspace_title:` (created on first use); a chief task → `COS_CHIEF_WORKSPACE_TITLE` (CHIEF); `COS_CMUX_WORKSPACE_ROUTES` (`PATTERN=TITLE;…`, glob on name/category/lane, workspace must exist); the `COS_CMUX_WORKSPACE` pin; the workspace titled `COS_CMUX_WORKSPACE_TITLE` (chief). Task `title:` names the tab. `--dry-run` prints the rule that picked. Layout/colour helpers come from `COS_CMUX_HELPERS` when set (`references/comms.md` → *Panes*). `COS_CMUX_TMUX=1`: claude runs in its own tmux session (`COS_TMUX_SOCKET`, `COS_TMUX_BIN`) and the pane only attaches; `where:` ends `/tmux:<name>` and `stop.sh` kills the session |
 | Push alerts (`COS_NOTIFY_CMD`) | `next.sh --alert` text on stdin to your notifier; an external scheduler (cron, launchd, a scheduler agent) runs `next.sh --alert` or a headless sweep |
 
 Per-worker environment (a different config dir, a proxy, credentials from your own store) is generic: set `COS_SPAWN_ENV_CMD` to a command that prints `KEY=value` lines; spawn.sh exports them into that worker's launch script only.
