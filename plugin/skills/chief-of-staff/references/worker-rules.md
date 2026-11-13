@@ -319,6 +319,10 @@ A Bash call that a hook blocks runs nothing. Re-run the parts that were not bloc
   quote: `git show "${b}:src/f.ts"`.
 - Monitor runs in zsh: put a watch loop in a file and run it with `/bin/bash <file>`.
 - A Monitor on a growing Reports section re-emits rewritten lines. Dedupe by a line-hash file.
+- `git merge-tree --write-tree A B | head -1 && echo ok` reports a conflict as clean (the pipeline exit is `head`'s).
+  Read the command's own status: `git merge-tree --write-tree A B >/dev/null; echo $?` (1 = conflict).
+- A command-output filter in front of git can rewrite `git show` output, so `git show X:file | grep -c` may print 0
+  for a line that exists. Use `command git` (or read the file in a worktree) for any count used as evidence.
 - Subagents never run a bare `git stash` / `git stash pop` (`git stash list` is fine).
 - A guard that matches a word (e.g. a heavy-command guard matching a type-checker name) also matches it inside a
   heredoc that only writes a script. Write the script with the Write tool, then run it.
