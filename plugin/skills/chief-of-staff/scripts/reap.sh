@@ -17,7 +17,7 @@
 # --only NAME    one worker only.
 # --schedule NAME  Stop-hook mode: if NAME is a stop candidate (DONE / parked), start ONE detached
 #                `reap.sh --only NAME` after COS_REAP_DELAY_S (240) s (marker $COS_DIR/.reap-pending-NAME); returns at once.
-# Wired: hooks/cos-reap.sh (Stop); run it periodically (e.g. from next.sh or a cron) to catch panes killed without a Stop.
+# Wired: hooks/cos-reap.sh (Stop and SessionEnd; not a SessionEnd for /clear or resume); run it periodically (e.g. from next.sh or a cron) to catch panes killed without a Stop.
 # Off switch: COS_REAP=0. Every action is logged to $COS_DIR/reap.log. Test overrides: COS_REAP_SESSIONS_TSV, COS_REAP_STOP.
 set -euo pipefail
 HERE="$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)"

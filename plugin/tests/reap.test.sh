@@ -91,6 +91,11 @@ printf '{"hook_event_name":"Stop"}' | COS_WORKER=a-rpark COS_REPORT_FILE="$T/cos
 printf '{"hook_event_name":"Stop"}' | COS_WORKER=a-unpark COS_REPORT_FILE="$T/cos/tasks/a-unpark.md" COS_REAP_DELAY_S=600 bash "$HOOK"
 [ ! -f "$T/cos/.reap-pending-a-unpark" ] && ok "hook: PARKED then WORKING schedules nothing" || bad "hook: unpark schedules"
 rm -f "$T/cos"/.reap-pending-*
+printf '{"hook_event_name": "SessionEnd", "reason": "clear"}' | COS_WORKER=a-rpark COS_REPORT_FILE="$T/cos/tasks/a-rpark.md" COS_REAP_DELAY_S=600 bash "$HOOK"
+[ ! -f "$T/cos/.reap-pending-a-rpark" ] && ok "hook: SessionEnd for /clear schedules nothing" || bad "hook: SessionEnd clear"
+printf '{"hook_event_name":"SessionEnd","reason":"prompt_input_exit"}' | COS_WORKER=a-rpark COS_REPORT_FILE="$T/cos/tasks/a-rpark.md" COS_REAP_DELAY_S=600 bash "$HOOK"
+[ -f "$T/cos/.reap-pending-a-rpark" ] && ok "hook: SessionEnd (exit) after PARKED schedules one reap" || bad "hook: SessionEnd exit schedules"
+rm -f "$T/cos"/.reap-pending-*
 for p in $(pgrep -f "$T"); do kill "$p" 2>/dev/null; done   # the 600 s delayed runs above
 printf '{"hook_event_name":"Stop"}' | AGENT_OPS_CONFIG="$T/no-config" COS_WORKER=a-rpark COS_REPORT_FILE="$T/cos/tasks/a-rpark.md" COS_REAP_DELAY_S=600 bash "$HOOK"
 [ ! -f "$T/cos/.reap-pending-a-rpark" ] && ok "hook: no agent-ops config → inactive" || bad "hook: inactive without config"
