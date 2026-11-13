@@ -635,9 +635,10 @@ L
   chmod +x "$LAUNCH"
   case "$COS_LAUNCHER" in
     cmux)
+      . "$HERE/addons/lib/cmux-equalize.sh"; FSNAP=$(cos_focus_snap)   # focus guard: what the owner sees before any create
       if [ -n "$WS" ]; then
         # Grid decided BEFORE the pane exists; never move a surface afterwards (that wipes scrollback).
-        . "$HERE/addons/lib/cmux-equalize.sh"; GRID_PLAN=; [ "${COS_LAYOUT:-row}" = grid ] && GRID_PLAN=$(cos_grid_plan "$WS"); out=
+        GRID_PLAN=; [ "${COS_LAYOUT:-row}" = grid ] && GRID_PLAN=$(cos_grid_plan "$WS"); out=
         if [ -n "$GRID_PLAN" ]; then
           out=$("$CM" new-split "${GRID_PLAN#* }" --surface "${GRID_PLAN% *}" --workspace "$WS" --command "$CMD" --focus false 2>&1) \
             || { echo "WARN: new-split ${GRID_PLAN#* } of ${GRID_PLAN% *} failed ($out) — using new-pane default" >&2; out=; }
@@ -649,8 +650,10 @@ L
         "$CM" tab-action --action rename --workspace "$WS" --surface "$SURF" --title "$NAME" >/dev/null 2>&1 \
           || echo "WARN: could not rename tab $SURF to $NAME" >&2
         WHERE="cmux ws${WS#workspace:}/$SURF"
-        [ -z "$PCOLOR" ] || cos_send_pane_color "$CM" "$WS" "$SURF" "$PCOLOR"
+        [ -z "$PCOLOR" ] || cos_send_pane_color "$CM" "$WS" "$SURF" "$PCOLOR" "$FSNAP"
+        cos_focus_keep "$FSNAP" "$WS" "$SURF" new-pane
         cos_equalize "$WS"
+        cos_focus_keep "$FSNAP" "$WS" "$SURF" equalize
       else
         echo "WARN: no cmux workspace titled \"${COS_CMUX_WORKSPACE_TITLE:-chief}\" — falling back to a NEW workspace" >&2
         "$CM" workspace create --name "$NAME" --cwd "$DIR" --command "$CMD" --focus false

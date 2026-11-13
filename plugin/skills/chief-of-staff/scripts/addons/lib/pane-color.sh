@@ -16,17 +16,35 @@ cos_pane_color() {
     [ -n "$pfx" ] && [ "$pfx" != "$pair" ] && case "$goal" in "$pfx"*) printf '%s' "$col"; return 0;; esac
   done
 }
-# Sent BEFORE the pane's first turn can finish: the first prompt is claude's argv, so the TUI is already working when this
-# lands — /color is typed as soon as the input box is up. Polls up to ${COS_COLOR_WAIT:-60}s; never blocks spawn.sh.
+# /color sent while the first turn runs can sit in the input box or get lost. So: wait for the TUI (up to
+# ${COS_COLOR_WAIT:-60}s), send, then poll read-screen for 'Session color set to: X' (up to ${COS_COLOR_VERIFY:-120}s
+# over 3 sends); text stuck in the input box + pane idle → Return again; no confirmation → ctrl+u and resend.
+# Optional 5th arg = spawn.sh focus snapshot (cos_focus_keep, addons/lib/cmux-equalize.sh). Backgrounded — never blocks.
 cos_send_pane_color() {
-  local cm="$1" ws="$2" surf="$3" color="$4" i
+  local cm="$1" ws="$2" surf="$3" color="$4" fsnap="${5:-}"
   (
+    keep() { [ -z "$fsnap" ] || ! type cos_focus_keep >/dev/null 2>&1 || cos_focus_keep "$fsnap" "$ws" "$surf" "$1"; }
+    rs() { "$cm" read-screen --workspace "$ws" --surface "$surf" --lines 60 2>/dev/null; }
+    sk() { "$cm" send-key --workspace "$ws" --surface "$surf" "$1" >/dev/null 2>&1; }
     for i in $(seq 1 "${COS_COLOR_WAIT:-60}"); do
-      "$cm" read-screen --workspace "$ws" --surface "$surf" 2>/dev/null | grep -qE 'bypass permissions|\? for shortcuts|esc to interrupt' && break
+      rs | grep -qE 'bypass permissions|\? for shortcuts|esc to interrupt' && break
       sleep 1
     done
-    "$cm" send --workspace "$ws" --surface "$surf" -- "/color $color" >/dev/null 2>&1
-    "$cm" send-key --workspace "$ws" --surface "$surf" return >/dev/null 2>&1
+    keep claude-start
+    per=$(( ${COS_COLOR_VERIFY:-120} / 3 )); [ "$per" -ge 5 ] || per=5
+    for try in 1 2 3; do
+      [ "$try" = 1 ] || sk ctrl+u
+      "$cm" send --workspace "$ws" --surface "$surf" -- "/color $color" >/dev/null 2>&1
+      sk return
+      t=0
+      while [ "$t" -lt "$per" ]; do
+        sleep 3; t=$((t + 3)); scr=$(rs)
+        printf '%s' "$scr" | grep -q "Session color set to: $color" && { keep color-send; exit 0; }
+        if printf '%s' "$scr" | grep -qE "^[│|[:space:]]*>[[:space:]]*/color $color" \
+           && ! printf '%s' "$scr" | grep -q 'esc to interrupt'; then sk return; fi
+      done
+    done
+    exit 1
   ) </dev/null >/dev/null 2>&1 &
   disown 2>/dev/null || true
 }
