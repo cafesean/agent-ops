@@ -321,6 +321,8 @@ by `steering-export.py` from the transcript (no LLM). spawn.sh `--continues` and
 context-handoff guard exports it when it fires. The successor walks the predecessor's steering file into a table in
 its task file, one row per item: `done (evidence)` / `open (next step)` / `rule (where filed)` / `unclear`, and its
 first `status: WORKING` line carries `steering: N items, M open`.
+- The user's text typed while a session is busy is a `queue-operation` `enqueue` row in the transcript, not a `user`
+  turn. Before calling an ask unanswered, check the owner's transcript for `"operation":"enqueue"` too.
 - **Interview:** while the predecessor is warm (live, or last turn < `COS_CONTINUITY_MIN`), SendMessage it the
   `unclear` items BEFORE reloading big docs: its answer costs a warm cache read, your reload a fresh cache write.
   Still unclear after its answer → one ask to the user.

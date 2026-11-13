@@ -72,7 +72,7 @@ def items(path):
     out, seen = [], set()
     with open(path, "rb") as f:
         for raw in f:
-            if b'"user"' not in raw and b'queued_command' not in raw:
+            if b'"user"' not in raw and b'queued_command' not in raw and b'queue-operation' not in raw:
                 continue
             try:
                 d = json.loads(raw)
@@ -80,7 +80,7 @@ def items(path):
                 continue
             if not isinstance(d, dict) or d.get("isSidechain"):
                 continue
-            ts, origin = d.get("timestamp"), d.get("origin") or {}
+            ts, origin, mid = d.get("timestamp"), d.get("origin") or {}, False
             if d.get("type") == "attachment":
                 a = d.get("attachment") or {}
                 p = a.get("prompt") if a.get("type") == "queued_command" else None
@@ -103,6 +103,11 @@ def items(path):
                     continue
                 else:
                     kind, src = "typed", "user"
+            elif d.get("type") == "queue-operation":   # text typed while the session was busy
+                c = d.get("content")
+                if d.get("operation") != "enqueue" or not isinstance(c, str):
+                    continue
+                kind, src, txt, mid = "typed", "user", c, True
             else:
                 continue
             txt = REMINDER.sub("", txt or "").strip()
@@ -116,7 +121,7 @@ def items(path):
             if key in seen:
                 continue
             seen.add(key)
-            out.append((_local(ts), kind, src, txt))
+            out.append((_local(ts), kind, src, txt + (" (typed mid-turn)" if mid else "")))
     return out
 
 
