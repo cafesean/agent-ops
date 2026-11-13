@@ -188,6 +188,24 @@ elif [ "$COS_LAUNCHER" = cmux ] && command -v "$CMG" >/dev/null 2>&1; then
   if [ -z "$GSURF" ]; then echo "WARN: $NAME's cmux surface not found — cannot check for running subagents; continuing" >&2
   else subagent_check "$("$CMG" read-screen ${GWS:+--workspace "$GWS"} --surface "$GSURF" 2>/dev/null || true)" "pane $GSURF"; fi
 fi
+# Transcript subagent gate (exit 7): a subagent writes its own .jsonl under <session>/subagents/ while it runs. A
+# subagent written in the last 10 min = running. Checked against the transcript, not the pane, so a lead that
+# hands over with subagents still going is not stopped; it stays up as a relay until they report.
+SUB_SID=
+for f in "$HOME"/.claude/sessions/*.json; do
+  [ -e "$f" ] || continue
+  if cos_python -c "import json,sys;sys.exit(0 if json.load(open(sys.argv[1])).get('name')==sys.argv[2] else 1)" "$f" "$NAME" 2>/dev/null; then
+    SUB_SID=$(cos_python -c "import json,sys;print(json.load(open(sys.argv[1])).get('sessionId',''))" "$f" 2>/dev/null || true); break
+  fi
+done
+if [ -n "$SUB_SID" ]; then
+  RUN_SUBS=$(find "$HOME"/.claude/projects -path "*/$SUB_SID/subagents/*.jsonl" -mmin -10 2>/dev/null | head -3)
+  if [ -n "$RUN_SUBS" ]; then
+    echo "WARN: $NAME has subagents written in the last 10 min (transcript) — stopping it ends their work" >&2
+    [ "$FORCE" = 1 ] || { echo "refuse: subagents still running. The lead stays up as a relay: forward each result to its successor and task file, start no new work, write 'subagents: 0 running' when they finish, then stop. Or re-run with --force." >&2; exit 7; }
+    echo "--force: stopping $NAME with subagents running" >&2
+  fi
+fi
 for f in "$HOME"/.claude/sessions/*.json; do
   [ -e "$f" ] || continue
   [ "$DRY" = 0 ] || { cos_python -c "import json,sys;sys.exit(0 if json.load(open(sys.argv[1])).get('name')==sys.argv[2] else 1)" "$f" "$NAME" 2>/dev/null && echo "DRY-RUN: would kill pid $(basename "$f" .json)"; continue; }

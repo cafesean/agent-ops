@@ -251,6 +251,7 @@ Detail: `references/tokens-and-sessions.md`.
 - **A standing rule needs the user's verbatim words, the time and the pane it came from.** A relay from another session is not a rule until the user confirms it.
 - **Never SendMessage, ping or cron a cold session** (last turn past the cache window, or the machine slept): continue it with `--continues`. The send-cold-guard hook enforces it.
 - **"Where is X" answers come from live git or a user-layer script**, never from memory.
+- **Never just kill a worker.** Its in-process subagents may still run. `stop.sh` checks the transcript and exits 7 while any subagent is live; a lead hands over as a relay until they report (`references/worker-rules.md` § Context size and handover).
 - **A blocked last story never holds the ONE Thing**: pick the next unblocked one and show the block as an ask.
 - **Workers follow `references/worker-rules.md`.** The worker prompt carries one pointer per section; subagent rules: `references/subagents.md`; a checkout many sessions write into: `references/shared-checkout-sync.md`.
 - **No secrets, hosts or personal paths in this plugin.** Real values live in config.env.

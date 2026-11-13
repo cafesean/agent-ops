@@ -138,6 +138,10 @@ Release prep in a subagent is read-only with ONE dry run; never re-run a proof a
 A subagent that edits a live file (a hook, a skill, a config) starts only after the parent has backed up the
 original. The parent confirms the edit is wired and tested, or restores the backup, before it reports done.
 
+A session never stops, gets reaped or is force-closed while its in-process subagents still run. Subagents keep
+their own context, so a lead near its handover point keeps them going and does not kill them. Check the transcript,
+not the pane: a subagent `.jsonl` under the session's `subagents/` dir written in the last 10 min is running.
+
 ## KB first
 
 **Existing-work sweep first.** Before building or designing anything, list the existing work for the job and name
@@ -244,6 +248,10 @@ row against its `at` column, your handover point (task `handoff_at`: spawn.sh st
 the context-handoff guard blocks your stop): write Resume Here (`/agent-ops:session-update` or a handoff skill),
 then ask. A handoff is a wind-down too: run step 3 of *Wind-down* first and put `refs: proposed <N>` or
 `refs: none (why)` in the Resume Here block and the `status: HANDOFF` line.
+
+A lead that hands over while subagents run stays up as a relay until they report. It forwards each subagent result to
+its successor and task file, starts no new work and reloads no big files. It writes `subagents: 0 running` when none
+are left, then stops. The successor does not re-dispatch those subagents.
 
 **Watchers and leads with a Monitor or session crons hand over the same way.** (1) At the handover point: Resume
 Here, then ask the chief for a successor. Never `spawn.sh --task-file` your own running task (it refuses). The chief
