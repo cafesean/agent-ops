@@ -111,6 +111,13 @@ place (a message, a CHIEF line), never replaced. A handover runs the references 
 handoff Stop hook blocks a stop at the handover point until Resume Here exists. Never SendMessage a cold session
 (the send-cold-guard hook denies it); never resume one either: use rung 3.
 
+**Usage-limit trend.** A session ended by a usage limit is a chief failure, logged as one. Every check-in and sweep
+projects each account's 5h use from its rate of change since the last reading. Projected ≥ 90% before the next check,
+or now ≥ 75%: in the same turn, move new sessions off that account and spawn successors for its live sessions on
+accounts with room. Do not wait for 90% or a cut-off. This is the account exception to the early-handover rule. Spread
+new sessions across the pool by live count, and cap any one account at 3 live sessions. Keep the account pointer and
+any status column that names it in step: they change together.
+
 **Resume the SAME session** only with `spawn.sh --resume <session-uuid> --task-file tasks/<name>.md`: same model, effort, flags and agent as the spawn, no first prompt, so the prompt cache survives. A bare `claude --resume` can change model or flags and re-read the whole context. Live process → exit 2 (stop it first).
 
 ## The plan — next.sh, per machine
