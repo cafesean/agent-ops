@@ -45,15 +45,23 @@ Scripts run as `${CLAUDE_PLUGIN_ROOT}/skills/chief-of-staff/scripts/<name>.sh` (
 |---|---|
 | `load-check.sh` | Verdict `LOCAL` / `LOCAL_LIGHT` / `OFFLOAD` + numbers; kills orphaned build workers |
 | `sessions.sh` | Live Claude sessions: name, pid, age, idle min. `--tsv` = the machine-readable form scripts must read |
-| `spawn.sh` | Start a worker from `--task-file tasks/<name>.md`. Gates: task goal + parent, launch dir, load, own prefix. `--continues`, `--resume`, `--agent`, `--dry-run`. Launcher per `COS_LAUNCHER` (`tmux`, `cmux`, `wt`; `print` = manual fallback, only prints the `claude` command) |
+| `spawn.sh` | Start a worker from `--task-file tasks/<name>.md`. Gates: task goal + parent, launch dir, load, own prefix, continuity (exit 6: the old session is live or still warm; `--fresh-ok` overrides). Picks the worker's role (chief / builder / non-dev; code dirs = `COS_CODE_DIRS`) and puts one `worker-rules.md` pointer per section in its prompt. `COS_SPAWN_ENV_CMD` injects per-worker environment. `--continues`, `--resume`, `--agent`, `--dry-run`. Launcher per `COS_LAUNCHER` (`tmux`, `cmux`, `wt`; `print` = manual fallback, only prints the `claude` command) |
 | `queue-run.sh` | The queue: spawns `status: open` tasks addressed to this machine; refuses `approved: false` |
 | `next.sh` | Plan daemon (no LLM): runs `queue-run.sh`, writes this machine's `<!-- cos:next:<prefix> -->` block of Outstanding.md (Needs you · Queue · Stale state · workers). `--alert` = only new blocked/died/asks |
 | `checkin.sh` | Pings `⟦CK⟧` to live workers silent > 30 min and idle ≤ 1 h |
 | `collect.sh` | Latest report of every worker (task file `## Reports`) |
-| `stop.sh` | Stop a worker: gates (DONE evidence, open asks, session log, own prefix), kill pid, close pane, set status + `closed:` |
+| `stop.sh` | Stop a worker: gates (DONE evidence, open asks, session log, own prefix; exit 7 missing `refs:`/steering or a Monitor still running, 8 the user typed in it recently, 9 an owned worktree not removed or locked), kill pid, close pane, set status + `closed:` |
+| `reap.sh` | Auto-close (`COS_REAP=1`): stops DONE, parked or dead workers idle ≥ `COS_REAP_IDLE_MIN` through `stop.sh`; never one the user typed in recently, a lead, or the chief |
+| `asks.py` | Asks lifecycle: `list`, `check` (run each `check:`), `verify`, `close`, `sweep`; keeps NEEDS YOU true |
+| `ctx.py` | Context used per live session vs its handover point (`handoff_at`); WARN at 70 %, NEEDS-YOU at the point |
+| `steering-export.py` | Every turn the user typed in a session, verbatim with time, into `steering/<name>.md` for the successor (no LLM) |
 | `archive.sh` | Daily: closed tasks (> 24 h) and old briefs → `_archive/`, read-only, never deleted |
 | `outstanding.sh` | Rebuild Outstanding.md from every source configured + every machine's `cos:next` block |
 | `waste-watch.sh` | Flags subagents that ran > 15 min (usually a sleep/self-watch) |
+
+Libraries in `scripts/lib/`: `tasks.py` (task frontmatter), `cos-os.sh` (OS helpers), `lastturn.py` (last real turn of a transcript = idle source), `loadgate.py` (OFFLOAD bit with hysteresis), `handoff.py` (handover point per role), `prodcontent.py` ("is it on prod" by content, not ancestry).
+
+Hooks (`plugin/hooks/`, arm in sessions started after an update): heartbeat and check-in; `heavy-cap-guard` (heavy local commands ≤ `COS_MAX_HEAVY_LOCAL`); `agent-budget-guard` (live subagents ≤ `COS_MAX_LIVE_SUBAGENTS`, no new ones at OFFLOAD); `send-cold-guard` (no SendMessage to a cold session); `cold-cache-warn` (notes when the user types into a cold one); `worktree-owner` (stamps each worktree with the session that made it, for stop.sh exit 9); `context-handoff-guard` (at the handover point, a stop needs Resume Here); `ask-guard` (asks need `check:`/`evidence:`); `cos-reap` (runs `reap.sh` at session end when `COS_REAP=1`).
 
 Add-on scripts live in `scripts/addons/` and print `addon <name> not configured, skipping` when off. See *Add-ons* below.
 
@@ -78,7 +86,9 @@ Not coordination: `briefs/` (newest 3), `_archive/` (read-only history), `.heart
 2. Another live chief session on this machine owns them per STATE.md → *Live crons* and its pid is alive → don't arm; say so in one line.
 3. Missing SWEEP → `CronCreate` recurring (default `7,27,47 * * * *`; offset per machine so two chiefs never write STATE.md together), prompt: `Chief-of-staff SWEEP. Load skill chief-of-staff and run SWEEP mode. Reply in the status-report format, or noop.`
 4. Missing checkin → `CronCreate` recurring `13,43 * * * *` running `$S/checkin.sh`.
-5. Write both ids into STATE.md → *Live crons* (replace the row). Never arm a second one.
+5. Write both ids into STATE.md → *Live crons* (replace the row), and this session's name into `$COS_DIR/CHIEF` (workers read it to message the chief). Never arm a second one.
+6. Any chief reply that finds an empty `CronList` runs Step 0 first.
+7. Optional daily handover: a chief session started before today, or past its handover point (`ctx.py`), hands over to a fresh chief once a day (Resume Here, successor `--continues`).
 
 | Invocation | Mode | Detail |
 |---|---|---|
@@ -152,14 +162,18 @@ Full mechanics: `references/orchestration.md`.
 3. Write `tasks/<name>.md` (`python3 scripts/lib/tasks.py new tasks/<name>.md --name N --to <prefix> --from <who> --charter <draft>` or by hand); body = the charter template. Every task gets its OWN `task goal:` + `done means:` + `parent goal: <ID>`. No parent fits → add a `confirm?` goal and tell the user, or `--no-goal` (PARK risk). One-way door awaiting the user → `approved: false`.
 4. `spawn.sh --task-file tasks/<name>.md` to start now, or leave `status: open` and the queue spawns it. Another machine's work → `to: <its prefix>`. **Name** `<prefix>-<topic>[-<specifier>][-N]`; `--dir` must be one of `$COS_LAUNCH_DIRS`.
 5. Tell the user one line: name, model, where it runs, what done looks like.
-6. Related issues the user raises go into the SAME worker (append to its task file), not a new one each.
+6. Related issues the user raises go into the SAME worker (append to its task file), not a new one each. An area owned by an earlier line goes to its successor (`--continues`, named `<line>-N`).
+7. Every issue the user raises gets a lane the same turn. An offer ("want me to…?") is a task: file the ask or the task in that turn. The user waiting on something gets an ETA from a counted source and, if needed, a freed slot.
+8. After a spawn, read the pane or `sessions.sh`: `OK spawned` proves nothing.
 
 ### SWEEP (the wake-up)
 
 Detail: `references/autonomy.md`.
 
 0. Read STATE.md, then this machine's `cos:next` block. **Needs you** first: answer what the chief can, close answered asks (`status: answered` + a `decisions:` line); `💤 park it` → worker hands off, `status: parked`. 💀 died → successor with `--continues`. Stale `_updated` → run `next.sh`. Then `outstanding.sh`.
-1. `queue-run.sh`, then `checkin.sh`.
+1. `queue-run.sh`, then `checkin.sh`, then `asks.py sweep`.
+1a. **Context check**: `ctx.py`. A worker at WARN gets a heads-up line; at NEEDS-YOU (its handover point) it writes Resume Here and the chief spawns its successor (`orchestration.md` → *Continuation*). Measure before any handover; never replace a session that is below its point.
+1b. Ship tracking on → `release-gap.sh` for items on dev but not prod. Remote runner on → `mini-run.sh --status` for stuck jobs.
 2. `collect.sh`. DONE → verify the artifact (commit, test count, file), then `stop.sh NAME DONE` (it refuses without `session:` and `teardown:`, plus `refs:`/`shipped:`/`jira:` when those are configured; ask the worker for what is missing) and dispatch the next step. BLOCKED → unblock if yours, else Needs you. Silent past its heartbeat → `sessions.sh`; a live pid is slow, not dead. Never start a duplicate.
 3. **Drift check**: each live worker's latest report vs its TASK goal (`references/goals.md` → *Drift signals*). Off-goal → 🟡 `drift?` row. Never stop a worker for drift; the user decides.
 4. 🧹 Stale-state rows → close them (`stop.sh`) or ask. `waste-watch.sh` output → 🟡 row naming the worker.
@@ -173,7 +187,7 @@ A new chief reads STATE.md then Outstanding.md + `tasks/` — that is the contin
 
 ## Model routing — guidance
 
-Pick per dispatch and always pass `model` explicitly. Use whatever model names your account offers; do not pin ids in this skill.
+Pick per dispatch and always pass `model` explicitly. Use whatever model names your setup offers; do not pin ids in this skill.
 
 | Work | Model tier |
 |---|---|
@@ -181,7 +195,7 @@ Pick per dispatch and always pass `model` explicitly. Use whatever model names y
 | Build, fix, design, spec, review, anything judged or acted on, briefs the user acts on, the chief itself | strongest available model |
 | Concurrency, auth, security, cross-service state, final whole-branch review | strongest available model |
 
-Research that must also judge ("is this safe to ship") goes to the strongest model.
+Research that must also judge ("is this safe to ship") goes to the strongest model. Unsure → cheap first, handing off to the strongest at the first design choice. A strongest-model dispatch that errors → do the work inline; never silently downgrade. Detail: `references/subagents.md`.
 
 ## Working with workers directly
 Workers are ordinary interactive Claude Code sessions. The user can click into any worker's window and talk to it at any time (answer a question, change direction, review its work).
@@ -197,7 +211,8 @@ Detail: `references/tokens-and-sessions.md`.
 - Cost ≈ calls × context. Batch commands; fresh subagent per step with a "read these paths" brief.
 - 3-4 subagents at once per session; at most `COS_MAX_LOCAL_SESSIONS` live sessions per machine. Over the cap, never stop a worker with an open ask; park it.
 - Never re-message a subagent idle > 5 min or a session idle > 1 h (cold cache). Spawn fresh and point it at files.
-- Near the context limit: write a handoff and spawn a successor rather than compacting a critical run.
+- Near the context limit: write a handoff and spawn a successor rather than compacting a critical run. Measure with `ctx.py` first.
+- **Continuity ladder** — cheapest rung first: 1 SendMessage a live session · 2 `--resume` one stopped < `COS_CONTINUITY_MIN` ago · 3 `--continues` from its session file · 4 mine its transcript with a cheap subagent · 5 recall from logs and the knowledge base. spawn.sh exit 6 enforces rungs 1-2 (`--fresh-ok` overrides). Detail: `references/orchestration.md` → *Continuation*.
 
 ## Critical rules
 
@@ -223,6 +238,13 @@ Detail: `references/tokens-and-sessions.md`.
 - **Session-to-session messages go via `SendMessage` to the session name**, never typed into a pane except as a verified fallback (`references/comms.md`).
 - **Status questions → `collect.sh` first** before any recon subagent.
 - **Heartbeats are hooks, not tokens**: a hook touches `.heartbeat/<worker>`; another turns a `⟦CK⟧` ping into one report line (`protocols/ck.md`). Hooks arm only in sessions started after a plugin update; never restart live sessions for it.
+- **Wind down before park or stop** (`references/worker-rules.md` → *Wind-down and teardown*). The chief never `--force`s past a stop.sh gate without first filling the gap itself.
+- **Never just kill a worker**: its subagents may be running. Stop one unasked only when it is CLEARLY done; never stop a session the user typed in within `COS_REAP_IDLE_MIN`. When the user stops a session it is stopped for good: `stop.sh` the same turn.
+- **A standing rule needs the user's verbatim words, the time and the pane it came from.** A relay from another session is not a rule until the user confirms it.
+- **Never SendMessage, ping or cron a cold session** (last turn past the cache window, or the machine slept): continue it with `--continues`. The send-cold-guard hook enforces it.
+- **"Where is X" answers come from a script** (`where-it-is.sh`, `release-gap.sh`) when ship tracking is on, never from memory.
+- **A blocked last story never holds the ONE Thing**: pick the next unblocked one and show the block as an ask.
+- **Workers follow `references/worker-rules.md`.** The worker prompt carries one pointer per section; subagent rules: `references/subagents.md`; a checkout many sessions write into: `references/shared-checkout-sync.md`.
 - **No secrets, hosts or personal paths in this plugin.** Real values live in config.env.
 
 ## Add-ons (opt-in via `/agent-ops:init`)
@@ -234,10 +256,12 @@ Each is off by default; core never needs one.
 | Scheduler agent (headless briefs, plan daemon, dead-man) | `references/addons/hermes.md` | `scripts/addons/hermes-jobs.sh`, `hermes-sweep.sh` |
 | Secrets vault (use keys, never read them) | `references/addons/secrets.md` | — |
 | Remote job runner (heavy commands on another machine) | `references/addons/hardware.md` | `scripts/addons/mini-run.sh` |
-| Multiple Claude logins (load balancing) | `references/addons/accounts.md` | `scripts/addons/account-add.sh`, `account-limit.sh` |
+| Workers that survive the terminal; sleep/wake guard (macOS) | `references/addons/hardware.md` → *Workers that survive the terminal* | `scripts/addons/local-tmux.sh`, `wake-guard.sh` |
 | Focus-aware mode (one screen, answer first, novelty guard) | `references/addons/adhd.md` | — |
 | Ship tracking (where each item is: local / pushed / dev / prod) | `references/orchestration.md` → *Ship tracking* | `scripts/addons/where-it-is.sh`, `release-gap.sh` |
 | cmux panes (side-by-side workers) | `references/comms.md` → *Panes* | `scripts/addons/lib/cmux-equalize.sh`, `pane-color.sh` |
+
+Per-worker environment (a different config dir, a proxy, credentials from your own store) is generic: set `COS_SPAWN_ENV_CMD` to a command that prints `KEY=value` lines; spawn.sh exports them into that worker's launch script only.
 
 Chat notifications (e.g. Telegram via `COS_TELEGRAM_TARGET`) and an issue tracker in Outstanding.md (`COS_JIRA_BASE`) are used only if configured.
 
@@ -253,4 +277,7 @@ Chat notifications (e.g. Telegram via `COS_TELEGRAM_TARGET`) and an issue tracke
 | `references/autonomy.md` | Wake mechanisms, drive loop, what runs unattended |
 | `references/self-improve.md` | Evidence → memory/skill promotion loop |
 | `references/file-map.md` | Every state file: where, who writes/reads, what is NOT in the state dir |
-| `references/comms.md` | How chiefs and workers talk (files only), per-machine slots, panes, handoff |
+| `references/comms.md` | How chiefs and workers talk (files only), per-machine slots, panes, handoff, talking to the user |
+| `references/worker-rules.md` | The rulebook every worker follows (one section per prompt pointer) |
+| `references/subagents.md` | When to fan out, model, brief checklist, isolation, stopping |
+| `references/shared-checkout-sync.md` | Pull/push a checkout other sessions also write into, without losing their edits |

@@ -80,12 +80,37 @@ spawn.sh gates: `task goal:` missing or parent missing/unknown/parked → exit 2
 4. **Collect** → `collect.sh` every sweep. Report values: `STARTED`, `WORKING`, `BLOCKED`, `DONE`, `FAILED`.
 5. **Verify** → on DONE, check the artifact (commit hash, test output, file). Unverified DONE stays running.
 6. **Close** → `stop.sh <name> DONE|FAILED|STOPPED [--force] [--dry-run]`. Refuses: no `session:` since STARTED (exit 4); an open ask unless `parked` (exit 5); a foreign prefix (exit 6); DONE without `session:` + `teardown:` — plus `refs:` when `COS_REQUIRE_REFS=1`, `shipped:` when ship tracking (`COS_SHIPPED`) is on and code moved, `jira:` when Jira is configured (exit 7). Kills only its own pid and pane, never the chief or the user's sessions.
+   - Also refuses: the user typed in the session within `COS_REAP_IDLE_MIN` (exit 8, `--force` only when they said it is finished); a worktree the worker made (stamped by the worktree-owner hook) is neither removed nor locked with a reason (exit 9, on DONE / STOPPED / PARKED / HANDOFF); HANDOFF without `refs:` or with a Monitor still running (exit 7).
+   - **Never just kill a worker**: its subagents may be running. Stop one unasked only when it is CLEARLY done. When the user stops a session, it is stopped for good: `stop.sh` the same turn.
+   - **Auto-close (`COS_REAP=1`)**: `reap.sh` (and the cos-reap SessionEnd/Stop hook, after `COS_REAP_DELAY_S`) stops DONE, parked or dead workers idle ≥ `COS_REAP_IDLE_MIN` (default 60) through `stop.sh`, so every gate still runs. It never reaps a session the user typed in within that window, a domain lead in `$COS_DIR/LEADS`, or the chief.
    - Refused DONE: confirm the artifact with live git, fill the gap yourself, record leftovers in STATE.md → Owed, then `--force`.
 7. **Archive** → `archive.sh` daily: tasks closed > 24 h → `_archive/` read-only; briefs beyond the newest 3 → `_archive/briefs/`. Never deletes.
 8. **State** → STATE.md lines change in the same turn as the landing (in place).
 
 ## Continuation
 A successor of any earlier worker (died, usage-limited, context-full, or a planned `-N` step) is ALWAYS spawned with `--continues <old>`. **Session file first**: the last `session:` path in the old task's `## Reports` (else frontmatter `handoff:`). **Current** = the file exists and no real-work report came after the line that named it. Current → FIRST STEP = read it (Resume Here) → reconcile git in every repo → one report line. Not current → the newest transcript `~/.claude/projects/<launch-dir slug>/*.jsonl` holding the old name; FIRST STEP = mine it with a cheap-model subagent (`/agent-ops:session-from-transcript`) into a Resume Here. Neither → exit 2. The new task records `continues:`; the old one becomes `status: stopped` + `handoff: "superseded by <new>"`.
+
+### Continuity ladder — cheapest rung that works
+Use context already paid for before building new context. Top rung first:
+
+| Rung | When | How |
+|---|---|---|
+| 1 SendMessage | the old session is still live | message it by name; no new session |
+| 2 Resume | old session stopped, last turn < `COS_CONTINUITY_MIN` (default 50 min, cache still warm) | `spawn.sh --task-file … --resume <uuid> --resume-prompt "<text>"` |
+| 3 `--continues` | cold, a current session file (Resume Here) exists | `spawn.sh --task-file … --continues <old>` |
+| 4 Mine the transcript | cold, no current session file | `--continues` makes the first step a cheap-model subagent that mines the transcript into a Resume Here |
+| 5 Recall | no transcript either | search past session logs and the knowledge base; then a fresh task with what was found |
+
+spawn.sh enforces rungs 1-2: `--continues OLD` with OLD still live → exit 6 "SendMessage it"; OLD's last transcript
+turn under `COS_CONTINUITY_MIN` → exit 6 printing the exact `--resume` command. `--fresh-ok` overrides both with a
+WARN when a fresh context is the point (a read-only watcher, a predecessor whose context is the problem). Without
+`--continues`, spawn WARNs when a task with the same first two name words closed recently or is live.
+
+**Handover rules.** Measure before any handover (`ctx.py`): a live session below its handover point is corrected in
+place (a message, a CHIEF line), never replaced. A handover runs the references step in the OLD session
+(`worker-rules.md` → *Context size and handover*) and the Resume Here lists uncommitted work per repo. The context-
+handoff Stop hook blocks a stop at the handover point until Resume Here exists. Never SendMessage a cold session
+(the send-cold-guard hook denies it); never resume one either: use rung 3.
 
 **Resume the SAME session** only with `spawn.sh --resume <session-uuid> --task-file tasks/<name>.md`: same model, effort, flags and agent as the spawn, no first prompt, so the prompt cache survives. A bare `claude --resume` can change model or flags and re-read the whole context. Live process → exit 2 (stop it first).
 
@@ -123,6 +148,9 @@ Rendered TEST → APPROVE → DECIDE, oldest first.
 - **Park rule**: an ask waiting > `$COS_PARK_MIN` min (default 50) shows `💤 park it`: the worker writes its handoff, sets `status: parked`, stops. A resume within 60 min is still cache-warm.
 - **Never stop a worker with an open ask** to meet a cap; park it. `stop.sh` exit 5 enforces it.
 - Check the charter's *Pre-authorized* list before asking; those never become asks.
+- **Every ask is verifiable**: a `check:` line (shell command; exit 0 = the ask is no longer needed) or an `evidence:` line. The ask-guard hook (`COS_ASK_GUARD`) denies an ask written into a task file without one, and an ask for something the worker can do itself (configuration, a console setting, signing in with the agent's own access).
+- **NEEDS YOU = verified this turn.** `asks.py` keeps the lane true: `asks.py list` shows open asks; `asks.py check <task>` runs each `check:` and reports which are stale (`checked:` older than `COS_ASK_FRESH_H`, default 4 h); `asks.py verify <task> <id>` stamps `checked:` when the ask still stands; `asks.py close <task> <id> <reason>` closes one; `asks.py sweep` checks every open task (the chief's SWEEP runs it). A stale ask is re-checked before it is shown again, never shown from memory.
+- Never `AskUserQuestion` in a worker pane: nobody watches it and the dialog blocks the worker.
 - **A broad answer covers only what the user was shown.** "go on all" applies only to the numbered asks just shown, each read as its narrowest option. In the next reply, state the exact write or deploy the go was read as.
 
 ## DEPLOY-LOCK
@@ -199,4 +227,11 @@ Report at every milestone and at the end.
 - Worker idle > 1 h: don't re-message it. Stop it and spawn a successor with `--continues`.
 - Two workers never share a git working tree: a worktree per worker.
 - Multi-lane work: one `integration/<slug>` branch per repo; lanes merge into it; it merges to the shared branch once per batch, then one proof run.
+- `--continues X` closes X (status `stopped`, `handoff: superseded by <new>`). A parallel lane gets its own name, never `--continues`.
+- spawn.sh copies `done means:` from the charter body when frontmatter lacks it. A test copy of a task file is a real task: the queue spawns any `status: open` + approved file, so test copies go outside `tasks/` or carry `status: draft`. Task frontmatter must parse (`tasks.py get` it after a hand edit).
+- Prompt text passed to spawn.sh lands in a double-quoted shell string: no `"`, backticks or `$` in it; put long text in the task file.
+- `OK spawned` proves nothing: read the pane (or `sessions.sh`) after a spawn; a worker with a disabled `--agent` or a bad flag exits at once.
+- Scheduled jobs (cron, launchd, Task Scheduler) call the plugin through a stable path (the newest installed version dir, resolved at run time, or a wrapper), never a pinned version path: plugin updates move it.
+- Per-worker environment (a different config, credentials file, proxy) goes through `COS_SPAWN_ENV_CMD`: a command spawn.sh runs per worker whose `KEY=value` output lines are exported into that worker's launch script. Values never go into task files or prompts.
+- Non-Claude workers (another coding agent in a pane) report only via their task file; the chief relays anything they need.
 - The chief is a session and dies too. Its successor reads STATE.md then Outstanding.md; the handoff lists only *Arm on start* steps.
