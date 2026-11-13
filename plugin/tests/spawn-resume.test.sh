@@ -27,10 +27,10 @@ printf 'COS_DIR=%q\nCOS_VAULT=%q\nCOS_VAULT_ALIAS=%q\nCOS_MACHINE_PREFIX=m\nCOS_
   "$T/cos" "$T/vault" "$T/home/vault-alias" "$T/repo" "$T/bin/claude" > "$T/config.env"
 # fake claude: one argv element per line, then the env keys it was given
 printf '#!/bin/sh\nfor a in "$@"; do printf "%%s\\n" "$a"; done > "$ARGV_OUT"\nenv > "$ARGV_OUT.env"\n' > "$T/bin/claude"; chmod +x "$T/bin/claude"
-TASK="$T/cos/tasks/m-lynn-x.md"
+TASK="$T/cos/tasks/m-docs-x.md"
 cat > "$TASK" <<T2
 ---
-name: m-lynn-x
+name: m-docs-x
 to: m
 dir: $T/repo
 model: opus
@@ -53,7 +53,7 @@ a=$(argv_of "$out"); last2=$(printf '%s\n' "$a" | tail -2 | tr '\n' ' ')
 [ "$last2" = "--resume $U " ] && ok "plain --resume: argv ends --resume UUID" || bad "plain argv tail" "$last2"
 
 # 2. --resume-prompt: the exact text is claude's last argv element, after --resume UUID
-P='New reply arrived. Run `$(ls -d ~/x/tool.sh | sort -V | tail -1) thread m-lynn-x`, act on it; "park" again.'
+P='New reply arrived. Run `$(ls -d ~/x/tool.sh | sort -V | tail -1) thread m-docs-x`, act on it; "park" again.'
 out=$(run --task-file "$TASK" --force --resume "$U" --resume-prompt "$P"); rc=$?
 [ "$rc" = 0 ] && ok "--resume-prompt dry run exits 0" || bad "--resume-prompt dry run" "rc=$rc $out"
 printf '%s\n' "$out" | grep -qF 'first prompt (--resume-prompt): New reply' && ok "dry run names the first prompt" || bad "dry-run prompt line" "$out"
@@ -62,9 +62,9 @@ a=$(argv_of "$out")
 [ "$(printf '%s\n' "$a" | tail -1)" = "$P" ] && ok "prompt reaches claude byte-for-byte (no shell expansion)" || bad "prompt argv" "$(printf '%s\n' "$a" | tail -1)"
 
 # 3. vault paths in the prompt go through the alias
-out=$(run --task-file "$TASK" --force --resume "$U" --resume-prompt "read $T/vault/tasks/m-lynn-x.md")
+out=$(run --task-file "$TASK" --force --resume "$U" --resume-prompt "read $T/vault/tasks/m-docs-x.md")
 a=$(argv_of "$out"); l=$(printf '%s\n' "$a" | tail -1)
-[ "$l" = "read $T/home/vault-alias/tasks/m-lynn-x.md" ] && ok "vault path in prompt → alias" || bad "vault alias" "$l"
+[ "$l" = "read $T/home/vault-alias/tasks/m-docs-x.md" ] && ok "vault path in prompt → alias" || bad "vault alias" "$l"
 
 # 4. --resume-prompt alone is refused
 out=$(run --task-file "$TASK" --force --resume-prompt "hi"); rc=$?
@@ -79,10 +79,10 @@ out=$(run --task-file "$TASK" --force --resume "$U"); rc=$?
 
 # 6. continuity ladder: predecessor's last turn 10 min ago → exit 6 with the resume command; --fresh-ok → WARN
 P2=0123abcd-0000-4000-8000-0000000000bb
-transcript "$P2" 10 m-lynn-old
-cat > "$T/cos/tasks/m-lynn-old.md" <<T3
+transcript "$P2" 10 m-docs-old
+cat > "$T/cos/tasks/m-docs-old.md" <<T3
 ---
-name: m-lynn-old
+name: m-docs-old
 to: m
 dir: $T/repo
 status: stopped
@@ -91,23 +91,23 @@ body
 ## Reports
 status: STARTED 2026-01-01 10:00
 T3
-NEW="$T/cos/tasks/m-lynn-new.md"
-sed -e 's/^name: m-lynn-x/name: m-lynn-new/' -e 's/^status: parked/status: open/' "$TASK" > "$NEW"
-out=$(run --task-file "$NEW" --continues m-lynn-old); rc=$?
+NEW="$T/cos/tasks/m-docs-new.md"
+sed -e 's/^name: m-docs-x/name: m-docs-new/' -e 's/^status: parked/status: open/' "$TASK" > "$NEW"
+out=$(run --task-file "$NEW" --continues m-docs-old); rc=$?
 [ "$rc" = 6 ] && printf '%s\n' "$out" | grep -q -- "--resume $P2 --resume-prompt" && ok "warm predecessor → exit 6 with its --resume command" || bad "ladder rung 2" "rc=$rc $out"
-out=$(run --task-file "$NEW" --continues m-lynn-old --fresh-ok); rc=$?
+out=$(run --task-file "$NEW" --continues m-docs-old --fresh-ok); rc=$?
 [ "$rc" = 0 ] && printf '%s\n' "$out" | grep -q 'fresh-ok' && ok "--fresh-ok spawns a fresh successor with a WARN" || bad "--fresh-ok" "rc=$rc $out"
 
 # 7. same-topic WARN without --continues (a closed same-topic task < 50 min ago)
-python3 - "$T/cos/tasks/m-lynn-old.md" <<'PYC'
+python3 - "$T/cos/tasks/m-docs-old.md" <<'PYC'
 import sys, time
 p = sys.argv[1]; s = open(p).read()
 open(p, "w").write(s.replace("status: stopped\n", "status: stopped\nclosed: \"%s\"\n" % time.strftime("%Y-%m-%d %H:%M"), 1))
 PYC
-SAME="$T/cos/tasks/m-lynn-old-2.md"
-sed -e 's/^name: m-lynn-new/name: m-lynn-old-2/' "$NEW" > "$SAME"
+SAME="$T/cos/tasks/m-docs-old-2.md"
+sed -e 's/^name: m-docs-new/name: m-docs-old-2/' "$NEW" > "$SAME"
 out=$(run --task-file "$SAME"); rc=$?
-printf '%s\n' "$out" | grep -q 'same-topic m-lynn-old closed' && ok "same-topic closed task → WARN with its resume command" || bad "same-topic WARN" "rc=$rc $out"
+printf '%s\n' "$out" | grep -q 'same-topic m-docs-old closed' && ok "same-topic closed task → WARN with its resume command" || bad "same-topic WARN" "rc=$rc $out"
 
 # 8. role: no COS_BUILDER_DIRS → builder; pointer lines name worker-rules sections when the rulebook exists
 printf '%s\n' "$out" | grep -q 'DRY-RUN role: builder' && ok "role defaults to builder with no COS_BUILDER_DIRS" || bad "role default" "$out"
@@ -121,7 +121,7 @@ printf 'COS_SPAWN_ENV_CMD=%q\n' "$T/envcmd" >> "$T/config.env"
 out=$(run --task-file "$NEW")
 printf '%s\n' "$out" | grep -q 'v4lue' && bad "env value printed in dry run" "$out" || ok "env values never printed by spawn"
 argv_of "$out" >/dev/null
-grep -qx 'WORKER_SECRET_X=v4lue-m-lynn-new' "$T/argv.env" && ok "COS_SPAWN_ENV_CMD line exported (got task + name args)" || bad "env export" "$(grep WORKER "$T/argv.env")"
+grep -qx 'WORKER_SECRET_X=v4lue-m-docs-new' "$T/argv.env" && ok "COS_SPAWN_ENV_CMD line exported (got task + name args)" || bad "env export" "$(grep WORKER "$T/argv.env")"
 grep -q '^bad-key=' "$T/argv.env" && bad "invalid key exported" || ok "invalid key names dropped"
 
 echo "PASS $PASS FAIL $FAIL"
