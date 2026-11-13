@@ -2,12 +2,12 @@
 # The task queue. A queued task = tasks/<name>.md with `status: open` and `to: <machine prefix>`.
 # Anyone (the owner, the chief on any machine, a worker) queues work by writing such a file; the sweep on the
 # addressed machine picks it up. Called by next.sh (so a scheduler can run it with no Claude session alive),
-# by addons/hermes-sweep.sh, and by SKILL.md SWEEP.
+# by an external scheduler, and by SKILL.md SWEEP.
 #   queue-run.sh [--dry-run] [--max N]      N = most spawns per run (default 2)
 # Per open task addressed to THIS machine (`to:` = COS_MACHINE_PREFIX; the host also takes the remote prefix):
 #   - `approved: false` (a one-way door the owner has not OK'd) → refused, stays open
-#   - `needs:` holds `vault`, the secrets add-on is configured (COS_VAULT_PORT) and its /_health is not OK
-#     → refused, stays open (add-on not configured → one skip line, not refused)
+#   - `needs:` is set and COS_NEEDS_CHECK_CMD (optional, a user-layer script) exits non-zero for it
+#     (run as `$COS_NEEDS_CHECK_CMD <needs value>`) → refused, stays open (unset → one skip line, not refused)
 #   - else CLAIM BY RENAME (tasks/<n>.md → tasks/.<n>.md.claim-<pid>; only one process wins), stamp
 #     status: claimed + claimed_by/claimed_at, rename back, run `spawn.sh --task-file`. spawn fails → status
 #     back to open + queue_note with the exit code (load OFFLOAD = exit 3 → retried next run; continuity ladder =
@@ -30,13 +30,9 @@ TPY="$HERE/lib/tasks.py"
 [ -d "$COS_DIR/tasks" ] || exit 0
 PFXS="$COS_PREFIX"
 [ "$COS_PREFIX" != "$COS_HOST_PREFIX" ] || [ -z "${COS_REMOTE_MACHINE_PREFIX:-}" ] || PFXS="$PFXS ${COS_REMOTE_MACHINE_PREFIX}"
-VAULT_OK=
-vault_ok() {
-  if [ -z "${COS_VAULT_PORT:-}" ]; then cos_skip "vault check" "secrets add-on not configured"; return 0; fi
-  if [ -z "$VAULT_OK" ]; then
-    VAULT_OK=no; curl -s -m 3 "http://127.0.0.1:${COS_VAULT_PORT}/_health" 2>/dev/null | grep -q '"ok": *true' && VAULT_OK=yes
-  fi
-  [ "$VAULT_OK" = yes ]
+needs_ok() {   # needs_ok VALUE → 0 when the task's needs are met (or no checker is configured)
+  if [ -z "${COS_NEEDS_CHECK_CMD:-}" ]; then cos_skip "needs check" "COS_NEEDS_CHECK_CMD not set"; return 0; fi
+  $COS_NEEDS_CHECK_CMD "$1" >/dev/null 2>&1
 }
 note() {   # note FILE REASON — record + print a refusal once per distinct reason
   local prev; prev=$(cos_python "$TPY" get "$1" queue_note)
@@ -77,7 +73,7 @@ while IFS=$'\t' read -r name st to path; do
   appr=$(cos_python "$TPY" get "$path" approved)
   if [ "$appr" = false ]; then note "$path" "refused: approved: false (one-way door — the owner OKs it by setting approved: true)"; continue; fi
   needs=$(cos_python "$TPY" get "$path" needs)
-  case "$needs" in *vault*) vault_ok || { note "$path" "refused: needs vault, secrets vault health not OK"; continue; };; esac
+  [ -z "$needs" ] || needs_ok "$needs" || { note "$path" "refused: needs ($needs) not met per COS_NEEDS_CHECK_CMD"; continue; }
   if [ "$DRY" = 1 ]; then echo "DRY-RUN queue: would claim + spawn $name (to $to) → spawn.sh --task-file $path"; n=$((n+1)); continue; fi
   claim="$(dirname "$path")/.$(basename "$path").claim-$$"
   mv -n "$path" "$claim" 2>/dev/null && [ -f "$claim" ] && ! [ -e "$path" ] || { echo "queue: $name already claimed elsewhere" >&2; continue; }

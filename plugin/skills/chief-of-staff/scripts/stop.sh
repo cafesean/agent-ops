@@ -12,7 +12,6 @@
 # DONE gate: STATUS=DONE refuses (exit 7) unless the report since the last STARTED has
 #   - always: a `session:` line (session log) and a `teardown:` line (worktrees removed/kept, servers stopped)
 #   - COS_REQUIRE_REFS=1: a `refs:` line (reference docs updated, or "none")
-#   - ship-tracking add-on on (COS_SHIPPED set) and code moved (a commit hash or `where: pushed|dev|prod`): a `shipped:` line
 #   - Jira add-on on (COS_JIRA_BASE set): a `jira:` tag
 #   Only a `status: STARTED` report line opens the window (a quoted WARN holding the word does not).
 # HANDOFF gate: STATUS=HANDOFF refuses (exit 7) without a `refs:` line since the last STARTED (handover = wind-down
@@ -63,9 +62,9 @@ print(0 if parked else sum(1 for a in fm.get("asks") or [] if isinstance(a, dict
   MFILE=/nonexistent
 fi
 if [ "$STATUS" = DONE ]; then
-  MISSING=$(cos_python - "$INBOX" "${COS_JIRA_BASE:-}" "${COS_REQUIRE_REFS:-0}" "${COS_SHIPPED:-}" <<'PY'
+  MISSING=$(cos_python - "$INBOX" "${COS_JIRA_BASE:-}" "${COS_REQUIRE_REFS:-0}" <<'PY'
 import re, sys, os
-p, jira_on, refs_on, ship_on = sys.argv[1], bool(sys.argv[2]), sys.argv[3] == "1", bool(sys.argv[4])
+p, jira_on, refs_on = sys.argv[1], bool(sys.argv[2]), sys.argv[3] == "1"
 lines = open(p, encoding="utf-8", errors="ignore").read().split("\n") if os.path.exists(p) else []
 start = max([i for i, l in enumerate(lines) if re.search(r"status:\s*\**\s*STARTED\b", l)] or [0])
 blk = "\n".join(lines[start:])
@@ -74,8 +73,6 @@ if not re.search(r"session:|sessions/", blk): need.append("session:")
 if not re.search(r"\bteardown:", blk): need.append("teardown:")
 if refs_on and not re.search(r"(?<![\w-])refs:\s*\S", blk): need.append("refs:")   # also inline "· refs: …"
 if jira_on and not re.search(r"\bjira:\s*\S", blk): need.append("jira:")
-moved = re.search(r"where:\s*(pushed|dev|prod)", blk) or re.search(r"\b(?=[0-9a-f]*\d)(?=[0-9a-f]*[a-f])[0-9a-f]{7,40}\b", blk)
-if ship_on and moved and not re.search(r"(?m)^\s*[-*]?\s*shipped:", blk): need.append("shipped:(code moved)")
 print(" ".join(need))
 PY
 )
@@ -215,7 +212,7 @@ if [ "$DRY" = 0 ] && [ "$COS_LAUNCHER" = cmux ] && command -v "$CM" >/dev/null 2
     if "$CM" close-surface --workspace "$ws" --surface "$surf" >/dev/null 2>&1; then
       echo "closed $surf in $ws"
       # Every pane close re-equalizes that workspace (cmux has no pane hook).
-      . "$HERE/addons/lib/cmux-equalize.sh" && cos_equalize "$ws"
+      cos_equalize "$ws"   # no-op unless COS_CMUX_HELPERS defines it
     fi
   else
     # legacy worker spawned as its own workspace: close it only if its title is exactly NAME and it is not the chief's

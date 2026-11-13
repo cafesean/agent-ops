@@ -1,23 +1,11 @@
-#!/usr/bin/env python3
-"""mini-run-guard: deny heavy Bash commands on this machine and point at `mini-run <cmd>`.
-
-Input: PreToolUse JSON on stdin. Output: nothing (allow, normal permission flow) or
-hookSpecificOutput.permissionDecision=deny with the exact mini-run command to use.
-
-Env knobs (mostly for tests):
-  COS_ALLOW_LOCAL_HEAVY=1   allow everything
-  COS_HEAVY_GUARD_ROOT      scope root (required; unset = allow everything)
-  COS_MINI_RUN_BIN          mini-run binary for the liveness check (default mini-run)
+"""heavy_classify — the heavy-command classifier heavy-cap-guard.py uses (one definition).
+classify(argv) → (label|None, cwd override): tsc (non-watch, non-noEmit-incremental), next build, a full vitest/jest
+run (no filter), turbo build/test/typecheck, pnpm/npm/yarn/bun test|typecheck|build. Pure functions, no I/O.
+split_segments / tokens / strip_prefix turn a shell command line into argv lists (wrappers like time/nice dropped).
 """
-import json
 import os
 import re
 import shlex
-import subprocess
-import sys
-
-ROOT = os.environ.get("COS_HEAVY_GUARD_ROOT", "")
-MINI = os.environ.get("COS_MINI_RUN_BIN", "mini-run")
 
 PMS = {"pnpm", "npm", "yarn", "bun"}
 RUNNERS = {"npx", "pnpx", "bunx"}
@@ -36,9 +24,6 @@ TEST_VALUE_FLAGS = {
 }
 FILTER_FLAGS = {"-t", "--testNamePattern", "--test-name-pattern", "--grep"}
 
-
-def allow():
-    sys.exit(0)
 
 
 def split_segments(cmd):
@@ -213,109 +198,3 @@ def classify(t):
     return None, None
 
 
-def under_root(path):
-    try:
-        p = os.path.realpath(path)
-        r = os.path.realpath(ROOT)
-    except OSError:
-        return False
-    return p == r or p.startswith(r.rstrip("/") + "/")
-
-
-def has_package_json(path):
-    r = os.path.realpath(ROOT)
-    p = os.path.realpath(path)
-    while True:
-        if os.path.isfile(os.path.join(p, "package.json")):
-            return True
-        if p == r or p == "/" or not p.startswith(r):
-            return False
-        p = os.path.dirname(p)
-
-
-def resolve(base, d):
-    d = os.path.expanduser(d)
-    return os.path.normpath(d if os.path.isabs(d) else os.path.join(base, d))
-
-
-def mini_up():
-    try:
-        r = subprocess.run([MINI, "--status"], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                           stdin=subprocess.DEVNULL, timeout=3)
-        return r.returncode == 0
-    except (subprocess.TimeoutExpired, OSError):
-        return False
-
-
-def sq(s):
-    return "'" + s.replace("'", "'\\''") + "'"
-
-
-def main():
-    try:
-        data = json.load(sys.stdin)
-    except ValueError:
-        allow()
-    if data.get("tool_name") != "Bash":
-        allow()
-    cmd = (data.get("tool_input") or {}).get("command") or ""
-    if not cmd.strip():
-        allow()
-    if os.environ.get("COS_ALLOW_LOCAL_HEAVY") == "1" or re.search(r"\bCOS_ALLOW_LOCAL_HEAVY=1\b", cmd):
-        allow()
-    if re.search(r"#\s*local-ok:\s*\S", cmd):
-        allow()
-    if re.search(r"(^|[\s;&|(/])mini-run(\s|$)", cmd):
-        allow()
-
-    cwd = data.get("cwd") or os.getcwd()
-    segs = split_segments(cmd)
-    for idx, seg in enumerate(segs):
-        t = strip_prefix(tokens(seg))
-        if not t:
-            continue
-        if t[0] == "cd":
-            cwd = resolve(cwd, t[1]) if len(t) > 1 else os.path.expanduser("~")
-            continue
-        if t[0] in ("pushd",) and len(t) > 1:
-            cwd = resolve(cwd, t[1]); continue
-        label, pm_dir = classify(t)
-        if not label:
-            continue
-        target = resolve(cwd, pm_dir) if pm_dir else cwd
-        if not under_root(target) or not has_package_json(target):
-            continue
-        # heavy, in scope
-        if not mini_up():
-            msg = "[mini-run-guard] remote runner unreachable (mini-run --status failed/timed out) — allowing heavy '%s' locally" % label
-            sys.stderr.write(msg + "\n")
-            print(json.dumps({"systemMessage": msg}))
-            sys.exit(0)
-        # suggestion: keep leading cd's outside, rest (rtk stripped) as the mini-run command
-        lead = [s for s in segs[:idx] if strip_prefix(tokens(s))[:1] == ["cd"]]
-        restcmd = re.sub(r"(^|[;&|(\n])(\s*)rtk\s+(proxy\s+)?", r"\1\2", cmd)
-        if lead and all(strip_prefix(tokens(s))[:1] == ["cd"] for s in segs[:idx]):
-            body = " && ".join(segs[idx:]) if len(segs) > idx + 1 else segs[idx]
-            body = re.sub(r"^rtk\s+(proxy\s+)?", "", body)
-            simple = len(segs) == idx + 1 and not re.search(r"[|&;<>()$`\\\"'*?]", body)
-            sugg = " && ".join(lead) + " && mini-run " + (body if simple else sq(body))
-        else:
-            simple = len(segs) == 1 and not re.search(r"[|&;<>()$`\\\"'*?]", restcmd)
-            sugg = "mini-run " + (restcmd.strip() if simple else sq(restcmd.strip()))
-        reason = (
-            "Heavy command (%s), so run it on the remote runner: `%s`. "
-            "Use `# local-ok: <reason>` only if it needs local DB/.env/browser. "
-            "(mini-run-guard: heavy commands run on the remote runner so this machine stays responsive.)"
-            % (label, sugg)
-        )
-        print(json.dumps({"hookSpecificOutput": {
-            "hookEventName": "PreToolUse",
-            "permissionDecision": "deny",
-            "permissionDecisionReason": reason,
-        }}))
-        sys.exit(0)
-    allow()
-
-
-if __name__ == "__main__":
-    main()

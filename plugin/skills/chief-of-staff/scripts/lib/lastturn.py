@@ -136,7 +136,7 @@ SPAWN_MARKERS = ("You are a worker session spawned by the chief of staff", "You 
 def _machine_turn(txt):
     s = (txt or "").lstrip()
     if s.startswith(("⟦CK⟧", "<cross-session-message", "<command-name>", "<command-message>", "<task-notification", "<cos-msg",
-                     "<system-reminder", "wake-guard:")): return True   # injected: ping, SendMessage, cos-msg, background-task notice, park message
+                     "<system-reminder", "wake-guard:")): return True   # injected: ping, SendMessage, relayed message, background-task notice, park message
     return any(m in s[:2000] for m in SPAWN_MARKERS)
 
 

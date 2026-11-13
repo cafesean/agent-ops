@@ -4,13 +4,12 @@ each are enough to saturate a laptop).
 
 Denies a heavy local job (tsc, vitest, jest, next build, pnpm/npm/yarn/bun test|typecheck|build,
 turbo build/test/typecheck) when >= COS_MAX_HEAVY_LOCAL (default 2) heavy job processes already
-run on this machine. Applies everywhere (not only under the heavy-guard scope root) and even with mini-run-guard's
-`# local-ok:` — local-ok says WHERE it must run, not that the machine has room.
-`mini-run …` commands pass (they run on the remote runner). Only Claude tool calls reach this hook,
+run on this machine. Applies in every directory. Commands that use a name in COS_HEAVY_REMOTE_CMDS
+(space list, e.g. a user-layer remote-runner script) are allowed: they run elsewhere. Only Claude tool calls reach this hook,
 so dev servers the user starts by hand are never blocked.
 Active only when the agent-ops config exists (the .sh wrapper checks; the wrapper is the registered entry).
 
-Command classification is mini-run-guard.py's classify() (one definition), plus bare `jest`.
+Command classification is heavy_classify.py's classify() (one definition), plus bare `jest`.
 Running-job count: ONE `ps -Axo args=` pass (comm= is cut at 16 chars on macOS, so argv is used).
 A job = a process whose argv[0] or script argv[1] is tsc/tsgo/vitest/jest/turbo, or next + build.
 Worker children (vitest/jest/next workers) are not counted; watch modes and turbo daemon not either.
@@ -34,7 +33,7 @@ SCRIPT_RE = re.compile(r"/(typescript/(bin/tsc|lib/tsc\.js)|\.bin/(tsc|tsgo|vite
 
 
 def load_classifier():
-    spec = importlib.util.spec_from_file_location("mrg", os.path.join(HERE, "mini-run-guard.py"))
+    spec = importlib.util.spec_from_file_location("mrg", os.path.join(HERE, "heavy_classify.py"))
     m = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(m)
     return m
@@ -101,8 +100,9 @@ def main():
     cmd = (data.get("tool_input") or {}).get("command") or ""
     if not cmd.strip() or re.search(r"#\s*heavy-ok:\s*\S", cmd):
         return
-    if re.search(r"(^|[\s;&|(/])mini-run(\s|$)", cmd):
-        return
+    for p in (os.environ.get("COS_HEAVY_REMOTE_CMDS") or "").split():
+        if re.search(r"(^|[\s;&|(/])" + re.escape(p) + r"(\s|$)", cmd):
+            return
     label = cmd_heavy(cmd, load_classifier())
     if not label:
         return
@@ -110,7 +110,7 @@ def main():
     n, jobs = running_heavy()
     if n < cap:
         return
-    reason = ("%d heavy jobs already running here (%s) — wait, or use mini-run when the remote runner is configured. "
+    reason = ("%d heavy jobs already running here (%s) — wait, or route it to another machine if your user rules name a way. "
               "Your command: %s. Escape only if it truly must run now: `# heavy-ok: <reason>`. "
               "(heavy-cap-guard, cap COS_MAX_HEAVY_LOCAL)"
               % (n, ", ".join(jobs) or "count override", label))

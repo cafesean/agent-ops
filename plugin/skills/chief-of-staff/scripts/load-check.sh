@@ -40,7 +40,7 @@ PAT='tsc --noEmit|vitest|jest-worker|next build'
 heavy=0; orphans=0; orphan_mb=0
 if [ "$COS_OS" != windows ] && command -v pgrep >/dev/null 2>&1; then
   for p in $(pgrep -f "$PAT" 2>/dev/null || true); do
-    case "$(ps -o args= -p "$p" 2>/dev/null)" in *mini-run*|ssh\ *) continue;; esac   # the job runs on the remote machine
+    case "$(ps -o args= -p "$p" 2>/dev/null)" in ssh\ *) continue;; esac   # an ssh-wrapped job runs on another machine
     read -r ppid rss < <(ps -o ppid=,rss= -p "$p" 2>/dev/null || echo "0 0")
     if [ "$ppid" = 1 ]; then orphans=$((orphans+1)); orphan_mb=$((orphan_mb + rss/1024)); else heavy=$((heavy+1)); fi
   done

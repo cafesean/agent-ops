@@ -6,7 +6,7 @@
 #     - briefs/: all but the newest 3 timestamped briefs                  → _archive/briefs/
 #   Only this machine's workers (name prefix COS_MACHINE_PREFIX; the host machine also owns the remote
 #   runner's prefix) unless --all-prefixes.
-#   Never touches GOALS.md, STATE.md, Outstanding.md, shipped.yaml, _heartbeat*, .heartbeat/, .worktrees/ or any add-on file.
+#   Never touches GOALS.md, STATE.md, Outstanding.md, _heartbeat*, .heartbeat/, .worktrees/ or any add-on file.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$HERE/cos-env.sh"
