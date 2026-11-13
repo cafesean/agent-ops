@@ -93,6 +93,10 @@ resource (SKILL.md § Critical rules; `destroy-guard` hook). Report the facts, t
 - Foreground Bash that can pass 2 min: a long `timeout` or `run_in_background`. A long script runs under
   `nohup … > log 2>&1 &`, watched with a Monitor.
 - Post a status line in the task file at least every 30 min: what finished, what runs next.
+- Head-vs-base compare on another machine: if the job swaps files with `git checkout <base> -- <path>`, check its exit
+  code and print `BASE_CHECKOUT_FAILED`; on failure run the base as its own job from a detached worktree of the base
+  branch. Start remote jobs with the Bash tool's `run_in_background`, never a trailing `&`, `nohup` or `disown`: the
+  detached job is lost and no notice arrives.
 - Heavy-command detection covers `npm exec`, `npx`, `pnpm exec`, `./node_modules/.bin/` forms, and a copy of the repo in a scratchpad dir. Every one of these runs on the mini.
 
 ## No overdoing
