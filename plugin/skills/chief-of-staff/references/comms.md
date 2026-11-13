@@ -20,8 +20,7 @@
 **Session-to-session messages** go via the `SendMessage` tool to the session NAME. Typing into a pane is a fallback only, and must be verified (below).
 
 **Send only what the receiver must act on now.** A delivered message wakes the receiver into a turn that re-reads its
-whole context (hundreds of thousands of tokens); the message text is ~150. Measured on one day of real traffic
-(3,053 messages): wake turns 6,580M tokens, message text 0.6M. So:
+whole context (often hundreds of thousands of tokens); the message text is a few hundred at most. So:
 - No acks (silence = received), no FYI or "no reply needed", no who-is-who broadcasts (the CHIEF / CAPTAIN files
   are the truth; sessions re-read them before messaging). Status and proof go to the sender's task file Reports.
 - One message per receiver per turn. No `me → you:` prefix: the receiver already sees the sender name.

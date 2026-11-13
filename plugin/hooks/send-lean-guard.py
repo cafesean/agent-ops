@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """send-lean-guard — PreToolUse(SendMessage) hook.
 
-Why: a delivered message makes the receiver run a turn that re-reads its whole context (hundreds of thousands of
-tokens per call). One measured day of real traffic: 3,053 messages = 6,580M tokens of wake turns vs 0.6M tokens of
-message text. The text is not the cost, the wake is. So the guard stops the messages that wake a session for nothing:
+Why: a delivered message makes the receiver run a turn that re-reads its whole context (often hundreds of thousands
+of tokens), while the message text itself is tiny. The text is not the cost, the wake is. So the guard stops the
+messages that wake a session for nothing:
 
-  ack     the whole message is an acknowledgement ("ok", "ack", "thanks", "noted", "got it") — silence = received.
+  ack     the whole message is nothing but acknowledgement words ("ok", "ack", "thanks", "noted", "got it") — silence
+          = received. "ok, go ahead with A" carries a decision and passes.
   noact   the sender says so itself: "no reply needed", "no action needed", "FYI only", "for your records".
   route   a who-is-who broadcast ("New chief = …", "new captain = …", "captain is now …"): the CHIEF / CAPTAIN
           files are the truth and every session re-reads them before it messages.
@@ -23,12 +24,11 @@ import sys
 
 NOACT = re.compile(r"\b(no reply (?:is )?needed|no action (?:is )?needed|no reply required|no action required|"
                    r"nothing for you to do|fyi only|for your records)\b", re.I)
-ROUTE = re.compile(r"^\s*(?:[\w.-]+\s*:\s*)?(?:new (?:[mx] )?(?:chief|captain)\b|(?:the )?[mx] (?:chief|captain) is now|"
+ROUTE = re.compile(r"^\s*(?:[\w.-]+\s*:\s*)?(?:new (?:[\w-]+ )?(?:chief|captain)\b|(?:the )?[\w-]+ (?:chief|captain) is now|"
                    r"(?:chief|captain) is now)", re.I)
-ACK = re.compile(r"^\s*(?:[\w.-]+(?:\s*(?:→|->)\s*[\w.-]+)?\s*:\s*)?(?:ack(?:nowledged)?|ok(?:ay)?|thanks?|thank you|"
-                 r"noted|got it|roger|received|understood|👍|✅)\b[\s.!,:;—-]*", re.I)
+ACK_WORD = r"(?:ack(?:nowledged)?|ok(?:ay)?|thanks?|thank you|noted|got it|roger|received|understood|👍|✅)"
+ACK = re.compile(r"^\s*(?:[\w.-]+(?:\s*(?:→|->)\s*[\w.-]+)?\s*:\s*)?(?:" + ACK_WORD + r"[\s.!,:;—-]*)+$", re.I)
 ROUTE_MAX = 400     # a longer message that opens with a routing line carries more; let it through
-ACK_TAIL = 40       # chars allowed after the ack word before it counts as a real message
 
 
 def verdict(text):
@@ -39,8 +39,7 @@ def verdict(text):
         return "noact"
     if len(s) < ROUTE_MAX and ROUTE.search(s):
         return "route"
-    m = ACK.match(s)
-    if m and len(s) - m.end() < ACK_TAIL:
+    if ACK.match(s):
         return "ack"
     return None
 
@@ -66,7 +65,7 @@ def main():
     if not v:
         return
     reason = (f"send-lean-guard: SendMessage denied — {WHY[v]}. Every message wakes the receiver into a turn that "
-              f"re-reads its whole context (~445k tokens). Put the line in your task file ## Reports instead; the "
+              f"re-reads its whole context. Put the line in your task file ## Reports instead; the "
               f"receiver reads it when it needs it (worker-rules § Messaging). If the receiver must act on it now, "
               f"rewrite it as that action, or add `# wake-ok: <reason>`.")
     print(json.dumps({"hookSpecificOutput": {
