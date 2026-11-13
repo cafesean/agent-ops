@@ -501,7 +501,7 @@ RULES_PROMPT="$RULES_PROMPT NO OVERDOING (§ No overdoing): do only what the nex
 [ "$ROLE" != builder ] || RULES_PROMPT="$RULES_PROMPT TEST TIERS (§ Test tiers): one quick proof per change is the default; full regression only where the section says."
 RULES_PROMPT="$RULES_PROMPT SUBAGENTS (§ Subagents): every brief has a wall-clock budget and returns partial at it; subagents never wait on deploys or locks."
 RULES_PROMPT="$RULES_PROMPT KB FIRST (§ KB first): search the project's docs and knowledge base before calling anything new."
-RULES_PROMPT="$RULES_PROMPT MESSAGING (§ Messaging): SendMessage to a session by name, never type into a pane.${CHIEF_NAME:+ Chief: $CHIEF_NAME.}"
+RULES_PROMPT="$RULES_PROMPT MESSAGING (§ Messaging): SendMessage to a session by name, never type into a pane. Send only what the receiver must act on now (no ack, FYI or broadcast; status goes to your task file); use the § Messaging codes (RR, LIVE, GO, HANDOFF, DONE …).${CHIEF_NAME:+ Chief: $CHIEF_NAME.}"
 [ "$ROLE" != builder ] || RULES_PROMPT="$RULES_PROMPT RELEASE (§ Release): never merge to the release branches or deploy yourself; follow the section."
 [ "$ROLE" = chief ] || RULES_PROMPT="$RULES_PROMPT DOMAIN LEADS (§ Domain leads): work in a domain that has a lead needs the lead's approval first."
 [ "$ROLE" != builder ] || RULES_PROMPT="$RULES_PROMPT LIMITS (§ Limits): any new or changed limit follows the section."

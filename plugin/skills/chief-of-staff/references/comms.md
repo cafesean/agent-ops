@@ -25,11 +25,8 @@ whole context (hundreds of thousands of tokens); the message text is ~150. Measu
 - No acks (silence = received), no FYI or "no reply needed", no who-is-who broadcasts (the CHIEF / CAPTAIN files
   are the truth; sessions re-read them before messaging). Status and proof go to the sender's task file Reports.
 - One message per receiver per turn. No `me → you:` prefix: the receiver already sees the sender name.
-- Short codes for fixed kinds, first word of the message; plain words for anything new or unusual:
-  `RR <repo> <branch>@<sha> → dev|prod · local:<proof>` release-request · `LIVE <repo> <sha> <env> · <proof>` ·
-  `BACK <repo> <sha> · <why>` · `REVIEW <item> · <path>` · `GO <item>` / `NO <item> · <why>` ·
-  `HANDOFF <ctx>k · spawn <next> --continues <me> · RH <file>` · `TOOK <old> · <adopted>` · `DONE <task> · <hash>` ·
-  `Q <question>` / `A <answer>`.
+- Short codes for fixed kinds (RR, LIVE, BACK, REVIEW, GO/NO, HANDOFF, TOOK, DONE, Q/A): `worker-rules.md` →
+  *Messaging*. Plain words for anything new or unusual.
 - Keep the codebook inside text every session already loads (this file, the worker rules). A separate file every
   session reads costs its own size on every later call, more than the codes save.
 

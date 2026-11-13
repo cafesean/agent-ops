@@ -167,6 +167,17 @@ changes on takeover); a release owner's in `$COS_DIR/CAPTAIN` when one is set. A
 goes by SendMessage; a task file alone never reaches another session.
 A session list row that looks exited is not proof. Before treating the chief, the release owner or a lead as down,
 check `sessions.sh --tsv` (live row + pid) or the CHIEF / CAPTAIN / LEADS files.
+- **Send only what the receiver must act on now.** Each message wakes the receiver into a turn that re-reads its
+  whole context; the text is ~150 tokens (`comms.md` → *Send only what the receiver must act on now*). No acks
+  (silence = received), no FYI or "no reply needed", no who-is-who broadcasts (CHIEF / CAPTAIN files are the
+  truth). Status and proof go to your task file Reports. One message per receiver per turn. No `me → you:` prefix:
+  the receiver already sees the sender name. The send-lean-guard hook denies ack, no-action and broadcast sends;
+  escape `# wake-ok: <reason>`.
+- **Codes** for fixed kinds, first word of the message; plain words for anything else:
+  `RR <repo> <branch>@<sha> → dev|prod · local:<proof>` release-request · `LIVE <repo> <sha> <env> · <proof>` ·
+  `BACK <repo> <sha> · <why>` send-back · `REVIEW <item> · <path>` · `GO <item>` / `NO <item> · <why>` verdict ·
+  `HANDOFF <ctx>k · spawn <next> --continues <me> · RH <file>` · `TOOK <old> · <adopted>` ·
+  `DONE <task> · <hash>` · `Q <question>` / `A <answer>`.
 - **Waiting = chasing.** A session blocked on another names it in its status line (`blocks: <session> — <what>`)
   and checks actively: it reads that session's task file Reports, and if nothing new arrives within 20 min it sends
   ONE SendMessage status question. Never idle silently on another session.
