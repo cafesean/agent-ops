@@ -35,7 +35,7 @@ whole context (often hundreds of thousands of tokens); the message text is a few
 - Workers are ordinary interactive Claude Code sessions. The user can click into any worker's window and talk to it at any time: answer a question, change direction, review its work.
 - Find one: tmux `tmux attach -t ${COS_TMUX_SESSION:-agent-ops}` (plus `-L`/`-S` when `COS_TMUX_SOCKET` is set), window = worker name; cmux = a pane in the chief's workspace; wt = a tab titled with the worker name.
 - The worker prompt says: when the owner gives new direction directly, follow it and add a one-line note under `## Reports`. The task file stays the record; the chief reads it, never the pane.
-- Closing a worker's window or pane kills that worker. `stop.sh` ends one cleanly (kills the pid, closes its tmux window or cmux pane; a wt tab stays open).
+- Closing a pane never stops a worker; it only logs the close. `stop.sh` is the only stop: it ends one cleanly (kills the pid, closes its tmux window or cmux pane; a wt tab stays open).
 
 ## Per machine — each writes only its own
 - Each machine has a prefix (`COS_MACHINE_PREFIX`, one or two letters). One machine may be the host (`COS_HOST_PREFIX`).

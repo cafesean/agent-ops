@@ -208,7 +208,7 @@ Research that must also judge ("is this safe to ship") goes to the strongest mod
 Workers are ordinary interactive Claude Code sessions. The user can click into any worker's window and talk to it at any time (answer a question, change direction, review its work).
 - Find them: tmux = `tmux attach -t ${COS_TMUX_SESSION:-agent-ops}`, one window per worker named after it; cmux = panes in the chief's workspace or the one a task or route names, tab titled by task `title:` (with `COS_CMUX_TMUX=1` each pane only attaches to a tmux session named after the worker, so workers survive a cmux quit; a user-layer script can re-open attach panes for the live sessions); wt = tabs titled with the worker name.
 - The worker prompt tells it to follow direct direction and add a one-line note under `## Reports`. The task file stays the record: read it, never the pane.
-- Closing a worker's window or pane kills that worker (with `COS_CMUX_TMUX=1` it only detaches); use `stop.sh` to end one cleanly.
+- Closing a pane never stops a worker; it only logs the close. `stop.sh` is the only stop.
 - `COS_LAUNCHER=print` is a manual fallback: it only prints the `claude` command; the sweep and queue cannot start workers.
 
 ## Tokens and sessions — short rules
