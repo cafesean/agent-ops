@@ -334,7 +334,9 @@ A Bash call that a hook blocks runs nothing. Re-run the parts that were not bloc
 - A guard that matches a word (e.g. a heavy-command guard matching a type-checker name) also matches it inside a
   heredoc that only writes a script. Write the script with the Write tool, then run it.
 - Git hygiene: a worktree that symlinks `node_modules` needs bare `node_modules` in `.gitignore` (a trailing slash
-  matches only directories). Stage explicit paths, never `git add -A`.
+  matches only directories). Stage explicit paths, never `git add -A`. In a plugin repo another
+  session may use, never edit or pull in the shared checkout: `git worktree add .claude/worktrees/<name> -b <branch>
+  origin/main`, work and push there, then `git worktree remove` it.
 
 ## Wind-down and teardown
 
