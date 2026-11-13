@@ -236,7 +236,9 @@ A limit never cuts what an agent can see (instructions, loaded skill text, tool 
 money, rate or safety. Before removing or resizing a limit, read in the code what happens to the part over it: dropped, refused, or stored and
 readable. Stored and readable is design: keep it. A removal never tightens: the new bound is today's ceiling or higher
 for every case, and the request notes that line per row. Reviewers block a diff that adds a limit without a row. Commit the row in the same step you
-write it. A limits file many sessions edit is synced with `shared-checkout-sync.md`, never read-modify-written.
+write it. A limits file many sessions edit is synced with `shared-checkout-sync.md`, never read-modify-written. Commit only your
+own row with a plain `git commit` after `git update-index --cacheinfo`; never `git commit -- <file>`: a pathspec commit
+takes the working file and sweeps in other sessions' uncommitted rows.
 
 ## Secrets in files
 
