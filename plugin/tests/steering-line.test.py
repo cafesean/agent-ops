@@ -187,17 +187,17 @@ class HandoffPoint(unittest.TestCase):
             self.assertEqual(HO.role_of(n), r)
         self.assertEqual(HO.default_at("a-app-lead-21"), 700_000)
         self.assertEqual(HO.default_at("a-release-captain-77"), 700_000)
-        self.assertEqual(HO.role_of("a-x-build-7", {"lanes": "3"}), "multi")
-        self.assertEqual(HO.default_at("a-x-build-7", {"lanes": "3"}), 700_000)
-        self.assertEqual(HO.role_of("a-x-build-7", {"lanes": "1"}), "builder")
-        self.assertEqual(HO.default_at("a-x-build-7", {"lanes": "1"}), 700_000)
+        self.assertEqual(HO.role_of("a-q-build-7", {"lanes": "3"}), "multi")
+        self.assertEqual(HO.default_at("a-q-build-7", {"lanes": "3"}), 700_000)
+        self.assertEqual(HO.role_of("a-q-build-7", {"lanes": "1"}), "builder")
+        self.assertEqual(HO.default_at("a-q-build-7", {"lanes": "1"}), 700_000)
         self.assertEqual(HO.handoff_at({}, "a-app-lead-21"), 800_000)        # no stamp: old session keeps the cap
-        self.assertEqual(HO.handoff_at({"handoff_at": "300000"}, "x-y-1"), 700_000)   # builder stamp floored to 700k
+        self.assertEqual(HO.handoff_at({"handoff_at": "300000"}, "a-y-1"), 700_000)   # builder stamp floored to 700k
         # 0.15.184: a `lanes:` line added after spawn lifts a stamped 300k to the multi-lane floor (no re-stamp needed)
         self.assertEqual(HO.handoff_at({"handoff_at": "300000", "lanes": "2"}, "a-app-chat-8"), 700_000)
         self.assertEqual(HO.handoff_at({"handoff_at": "300000", "lanes": "1"}, "a-app-build-8"), 700_000)
         self.assertEqual(HO.handoff_at({"handoff_at": "350000"}, "a-app-lead-9"), 700_000)   # a lead stamp below 700k is floored
-        self.assertEqual(HO.handoff_at({"handoff_at": "900000"}, "x-y-1"), 800_000)   # never above the cap
+        self.assertEqual(HO.handoff_at({"handoff_at": "900000"}, "a-y-1"), 800_000)   # never above the cap
 
     def test_recompute_moves_with_R(self):
         self.assertGreaterEqual(HO.recompute("captain", 90_000), 700_000)          # floor: never pulled under the point
