@@ -8,7 +8,8 @@
 #                  its body is the charter. `to:` must be this machine's prefix; status must be open|claimed (else
 #                  exit 2 unless --force). The worker reports under `## Reports` of that file and asks the owner via `asks:`.
 #   Launcher       COS_LAUNCHER (config): print = print the exact claude command + task file path, open nothing;
-#                  tmux = new window in tmux session `agent-ops`; cmux = new pane in the chief's cmux workspace (add-on).
+#                  tmux = new window in tmux session `agent-ops`; cmux = new pane in a cmux workspace (add-on; which
+#                  workspace: see "cmux workspace" below).
 #   cmux + tmux    COS_CMUX_TMUX=1 (with COS_LAUNCHER=cmux; default 0): claude runs in its own tmux session named NAME
 #                  and the cmux pane only attaches, so the worker survives quitting or restarting cmux. spawn.sh first
 #                  runs `tmux new-session -d -s NAME -c DIR "bash LAUNCH; exec $SHELL -l"` (the chief's CMUX_* pane
@@ -46,6 +47,21 @@
 #                  (a new turn after the cached context; flags unchanged, so the cache still holds). Plain --resume
 #                  sends no first prompt.
 #   --workspace REF  cmux launcher only: the workspace the pane opens in.
+#   cmux workspace (COS_LAUNCHER=cmux), first hit wins; titles match case-insensitively; an empty `cmux tree --all`
+#                  is retried once:
+#                  1. --workspace REF / $COS_SPAWN_WORKSPACE (must be live, else exit 2);
+#                  2. task `workspace_title:` — the workspace with that title; none → created at launch with
+#                     `workspace create --json --id-format both`, the pane goes in the ref it RETURNS (never a tree
+#                     re-read) and its placeholder shell is closed once the worker pane exists;
+#                  3. a chief task (role chief: task `role: chief`, a *-chief / *-chief-* name, the CHIEF file's name)
+#                     → the workspace titled $COS_CHIEF_WORKSPACE_TITLE (default CHIEF); missing → WARN, next rule;
+#                  4. $COS_CMUX_WORKSPACE_ROUTES: `;`-separated PATTERN=TITLE; PATTERN is a case-insensitive shell glob
+#                     matched against "<name> <category> <lane>" (task `category:` / `lane:`); first match wins; the
+#                     workspace must already exist (never created) — else WARN, next rule;
+#                  5. the $COS_CMUX_WORKSPACE pin while it is live; 6. the workspace titled $COS_CMUX_WORKSPACE_TITLE
+#                     (default chief); 7. none → a new workspace named after the worker.
+#                  --dry-run prints which rule picked the workspace. Task `title:` → the pane/tab title (default NAME).
+#                  Focus guard: the owner's focus is snapped before any create and restored after.
 # Launch-dir guard: --dir must be exactly one of $COS_LAUNCH_DIRS (colon-separated).
 # Workers run on THIS machine only. Another machine runs its own chief + queue-run.sh over the shared $COS_DIR and
 #   spawns the tasks addressed `to: <its prefix>`; there is no cross-machine launch.
@@ -575,21 +591,64 @@ export COS_WORKER=$NAME COS_TAG=$(printf '%q' "$ITAG") COS_REPORT_FILE=$(printf 
 exec $(printf '%q' "$CLAUDE_BIN") "\${COS_CMUX_ARGS[@]+"\${COS_CMUX_ARGS[@]}"}" ${RC_FLAG}-n $(printf '%q' "$NAME") --model $MODEL ${AGENT_FLAG}--effort high ${DISALLOW_FLAG}${EXTRA_FLAGS}$LAST_ARGS
 L
 )
-WS=
+WS= WS_RULE= WS_CREATE= WS_UUID= WS_PLACEHOLDER= TAB_TITLE="$NAME" FSNAP=
 if [ "$COS_LAUNCHER" = cmux ]; then
   command -v "$CM" >/dev/null 2>&1 || [ -x "$CM" ] || { echo "cmux not found (COS_LAUNCHER=cmux) — set COS_LAUNCHER=tmux or print" >&2; exit 1; }
-  # Target workspace, first hit wins: --workspace / $COS_SPAWN_WORKSPACE, the config pin if it still exists,
-  # the workspace titled $COS_CMUX_WORKSPACE_TITLE (default "chief").
+  # Task fields read from the task file (the stamped copy under tasks/, else the --task-file given).
+  tval() { local f="$TASKP"; [ -f "$f" ] || f="$TASKF"; [ -n "$f" ] && [ -f "$f" ] || return 0; cos_python "$TPY" get "$f" "$1" 2>/dev/null || true; }
+  # Task `title:` → the pane/tab title (default: the worker name). stop.sh finds panes by `where:`, never by title.
+  t=$(tval title); [ -z "$t" ] || TAB_TITLE="$t"
+  [ "$DRY" = 1 ] || FSNAP=$(cos_focus_snap)   # focus guard: what the owner sees before any workspace or pane create
   TREE=$("$CM" tree --all 2>/dev/null || true)
+  # one retry: an empty tree under load makes a titled lookup miss (a duplicate workspace or the wrong fallback)
+  [ -n "$TREE" ] || { sleep 1; TREE=$("$CM" tree --all 2>/dev/null || true); }
   ws_live() { [ -z "$TREE" ] || printf '%s\n' "$TREE" | awk -v w="$1" '/ workspace workspace:[0-9]+ / {for(i=1;i<=NF;i++) if ($i==w) f=1} END {exit !f}'; }
+  # ws_titled TITLE → the ref of the workspace with that title (case-insensitive), or nothing
+  ws_titled() { printf '%s\n' "$TREE" | awk -v t="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')" 'tolower($0) ~ (" workspace workspace:[0-9]+ \"" t "\"( |$)") {for(i=1;i<=NF;i++) if ($i ~ /^workspace:[0-9]+$/) {print $i; exit}}'; }
+  # Target workspace, first hit wins (the spawn.sh header lists the order).
   WS="$WS_ARG"
   if [ -n "$WS" ]; then
     ws_live "$WS" || { echo "refuse: --workspace $WS is not in \`cmux tree --all\` — pass a live workspace:N ref" >&2; exit 2; }
-  elif [ -n "${COS_CMUX_WORKSPACE:-}" ]; then
-    if ws_live "$COS_CMUX_WORKSPACE"; then WS="$COS_CMUX_WORKSPACE"
+    WS_RULE="--workspace / COS_SPAWN_WORKSPACE"
+  fi
+  # (b) task `workspace_title:` — the workspace with that title; none → created at launch (never re-read from the tree)
+  TWS_TITLE=$(tval workspace_title)
+  if [ -z "$WS" ] && [ -n "$TWS_TITLE" ]; then
+    WS=$(ws_titled "$TWS_TITLE")
+    if [ -n "$WS" ]; then WS_RULE="task workspace_title \"$TWS_TITLE\""; else WS_CREATE="$TWS_TITLE"; fi
+  fi
+  # (c) a chief task (role chief: task `role: chief`, a *-chief / *-chief-* name, or the CHIEF file's name)
+  CHIEF_WS_TITLE="${COS_CHIEF_WORKSPACE_TITLE:-CHIEF}"
+  if [ -z "$WS" ] && [ -z "$WS_CREATE" ] && [ "$ROLE" = chief ]; then
+    WS=$(ws_titled "$CHIEF_WS_TITLE")
+    if [ -n "$WS" ]; then WS_RULE="chief task → workspace \"$CHIEF_WS_TITLE\""
+    else echo "WARN: chief task but no workspace titled \"$CHIEF_WS_TITLE\" (COS_CHIEF_WORKSPACE_TITLE) — using the next rule" >&2; fi
+  fi
+  # (d) COS_CMUX_WORKSPACE_ROUTES: `;`-separated PATTERN=TITLE; PATTERN is a case-insensitive shell glob matched against
+  # "<name> <category> <lane>"; first match wins; the workspace must already exist (never created here).
+  if [ -z "$WS" ] && [ -z "$WS_CREATE" ] && [ -n "${COS_CMUX_WORKSPACE_ROUTES:-}" ]; then
+    RSUBJ=$(printf '%s %s %s' "$NAME" "$(tval category)" "$(tval lane)" | tr '[:upper:]' '[:lower:]')
+    IFS=';' read -r -a _routes <<< "$COS_CMUX_WORKSPACE_ROUTES"
+    for r in "${_routes[@]+"${_routes[@]}"}"; do
+      case "$r" in *=*) ;; *) continue;; esac
+      rp=$(printf '%s' "${r%%=*}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | tr '[:upper:]' '[:lower:]')
+      rt=$(printf '%s' "${r#*=}" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//')
+      [ -n "$rp" ] && [ -n "$rt" ] || continue
+      # shellcheck disable=SC2254  # the pattern is a glob on purpose
+      case "$RSUBJ" in $rp)
+        WS=$(ws_titled "$rt")
+        if [ -n "$WS" ]; then WS_RULE="route $rp → workspace \"$rt\""
+        else echo "WARN: route $rp matches but no workspace titled \"$rt\" (COS_CMUX_WORKSPACE_ROUTES; never created) — using the next rule" >&2; fi
+        break;;
+      esac
+    done
+  fi
+  # (e) the config pin if it still exists, then the workspace titled $COS_CMUX_WORKSPACE_TITLE (default "chief")
+  if [ -z "$WS" ] && [ -n "${COS_CMUX_WORKSPACE:-}" ]; then
+    if ws_live "$COS_CMUX_WORKSPACE"; then WS="$COS_CMUX_WORKSPACE" WS_RULE="COS_CMUX_WORKSPACE pin"
     else echo "WARN: COS_CMUX_WORKSPACE=$COS_CMUX_WORKSPACE is stale — falling back to the workspace titled \"${COS_CMUX_WORKSPACE_TITLE:-chief}\"" >&2; fi
   fi
-  [ -n "$WS" ] || WS=$(printf '%s\n' "$TREE" | awk -v t="${COS_CMUX_WORKSPACE_TITLE:-chief}" '$0 ~ (" workspace workspace:[0-9]+ \"" t "\"( |$)") {for(i=1;i<=NF;i++) if ($i ~ /^workspace:[0-9]+$/) {print $i; exit}}')
+  if [ -z "$WS" ]; then WS=$(ws_titled "${COS_CMUX_WORKSPACE_TITLE:-chief}"); [ -z "$WS" ] || WS_RULE="workspace titled \"${COS_CMUX_WORKSPACE_TITLE:-chief}\""; fi
 fi
 # cmux + tmux (COS_CMUX_TMUX=1): claude lives in tmux session NAME; the pane command only attaches.
 CTMUX=0 TSESS_CMD=
@@ -617,10 +676,16 @@ if [ "$DRY" = 1 ]; then
   case "$COS_LAUNCHER" in
     cmux)
       [ "$CTMUX" = 0 ] || printf 'DRY-RUN tmux (COS_CMUX_TMUX=1): %s new-session -d -s %q -c %q %q\n' "$(cos_tmux_cmd)" "$NAME" "$DIR" "$TSESS_CMD"
-      if [ -n "$WS" ]; then GRID_PLAN=; [ "${COS_LAYOUT:-row}" = grid ] && GRID_PLAN=$(cos_grid_plan "$WS")
+      if [ -n "$WS_CREATE" ]; then echo "DRY-RUN workspace: would create \"$WS_CREATE\" (task workspace_title)$([ -n "$WS" ] && echo " · if that fails: $WS ($WS_RULE)")"
+        printf 'DRY-RUN: %q --json --id-format both workspace create --name %q --cwd %q --focus false\n' "$CM" "$WS_CREATE" "$DIR"
+        printf 'DRY-RUN: %q new-pane --type terminal --workspace <created ref> --direction right --command %q --focus false; then close the placeholder surface\n' "$CM" "$CMD"
+      elif [ -n "$WS" ]; then echo "DRY-RUN workspace: $WS ($WS_RULE)"
+        GRID_PLAN=; [ "${COS_LAYOUT:-row}" = grid ] && GRID_PLAN=$(cos_grid_plan "$WS")
         if [ -n "$GRID_PLAN" ]; then printf 'DRY-RUN: %q new-split %s --surface %s --workspace %q --command %q --focus false\n' "$CM" "${GRID_PLAN#* }" "${GRID_PLAN% *}" "$WS" "$CMD"
         else printf 'DRY-RUN: %q new-pane --type terminal --workspace %q --direction right --command %q --focus false\n' "$CM" "$WS" "$CMD"; fi
-      else printf 'DRY-RUN (no chief workspace, fallback): %q workspace create --name %q --cwd %q --command %q --focus false\n' "$CM" "$NAME" "$DIR" "$CMD"; fi
+      else echo "DRY-RUN workspace: none (no rule matched) — fallback: a new workspace named after the worker"
+        printf 'DRY-RUN (no chief workspace, fallback): %q workspace create --name %q --cwd %q --command %q --focus false\n' "$CM" "$NAME" "$DIR" "$CMD"; fi
+      echo "DRY-RUN tab title: $TAB_TITLE"
       [ -z "$PCOLOR" ] || printf 'DRY-RUN: then %q send %q to the new pane\n' "$CM" "/color $PCOLOR"
       [ "$CTMUX" = 0 ] || echo "DRY-RUN where: cmux ws<N>/surface:<M>/tmux:$NAME (the pane only attaches; stop.sh kills the session)";;
     wt) printf 'DRY-RUN: %s -w 0 new-tab --title %q %s\n' "$(cos_wt_bin 2>/dev/null || echo wt.exe)" "$NAME" "$(wt_shell_args | tr '\n' ' ')";;
@@ -642,7 +707,17 @@ case "$COS_LAUNCHER" in
     if [ "$CTMUX" = 1 ]; then
       cos_tmux new-session -d -s "$NAME" -c "$DIR" "$TSESS_CMD" || { echo "tmux new-session $NAME failed" >&2; exit 1; }
     fi
-    FSNAP=$(cos_focus_snap)   # focus guard: what the owner sees before any create
+    if [ -n "$WS_CREATE" ]; then
+      # task workspace_title, first use: the target is the ref + placeholder surface that `workspace create` RETURNS —
+      # never a tree re-read by title (a just-created workspace can be missing from it). Placeholder closed below.
+      IFS='|' read -r WS_UUID NEWWS WS_PLACEHOLDER < <(CMUX_QUIET=1 "$CM" --json --id-format both workspace create --name "$WS_CREATE" --cwd "$DIR" --focus false 2>/dev/null \
+        | cos_python -c 'import json,sys; j=json.load(sys.stdin); print("|".join(j.get(k) or "" for k in ("workspace_id", "workspace_ref", "surface_id")))' 2>/dev/null || true) || true
+      case "${NEWWS:-}" in
+        workspace:[0-9]*) WS="$NEWWS" WS_RULE="task workspace_title \"$WS_CREATE\" (created)";;
+        *) WS_UUID= WS_PLACEHOLDER=
+           echo "WARN: could not create workspace \"$WS_CREATE\" (task workspace_title) — using ${WS:-a new workspace named after the worker}${WS_RULE:+ ($WS_RULE)}" >&2;;
+      esac
+    fi
     if [ -n "$WS" ]; then
       # Grid decided BEFORE the pane exists; never move a surface afterwards (that wipes scrollback).
       GRID_PLAN=; [ "${COS_LAYOUT:-row}" = grid ] && GRID_PLAN=$(cos_grid_plan "$WS"); out=
@@ -655,15 +730,18 @@ case "$COS_LAUNCHER" in
       SURF=$(printf '%s\n' "$out" | grep -oE 'surface:[0-9]+' | head -1)
       [ -n "$SURF" ] || { echo "cmux new-pane gave no surface: $out" >&2
         [ "$CTMUX" = 0 ] || echo "note: the worker still runs in tmux session $NAME — attach: $(cos_tmux_cmd) attach -t '=$NAME'" >&2; exit 1; }
-      "$CM" tab-action --action rename --workspace "$WS" --surface "$SURF" --title "$NAME" >/dev/null 2>&1 \
-        || echo "WARN: could not rename tab $SURF to $NAME" >&2
+      "$CM" tab-action --action rename --workspace "$WS" --surface "$SURF" --title "$TAB_TITLE" >/dev/null 2>&1 \
+        || echo "WARN: could not rename tab $SURF to $TAB_TITLE" >&2
       WHERE="cmux ws${WS#workspace:}/$SURF"
+      # the created workspace's placeholder shell goes only now that the worker pane exists
+      for t in $WS_PLACEHOLDER; do CMUX_QUIET=1 "$CM" close-surface --workspace "$WS_UUID" --surface "$t" >/dev/null 2>&1 || true; done
+      [ -z "$WS_PLACEHOLDER" ] || cos_focus_keep "$FSNAP" "$WS" "$SURF" close-placeholder
       [ -z "$PCOLOR" ] || cos_send_pane_color "$CM" "$WS" "$SURF" "$PCOLOR" "$FSNAP"
       cos_focus_keep "$FSNAP" "$WS" "$SURF" new-pane
       cos_equalize "$WS"
       cos_focus_keep "$FSNAP" "$WS" "$SURF" equalize
     else
-      echo "WARN: no cmux workspace titled \"${COS_CMUX_WORKSPACE_TITLE:-chief}\" — falling back to a NEW workspace" >&2
+      echo "WARN: no workspace rule matched and no cmux workspace titled \"${COS_CMUX_WORKSPACE_TITLE:-chief}\" — falling back to a NEW workspace" >&2
       "$CM" workspace create --name "$NAME" --cwd "$DIR" --command "$CMD" --focus false
       WHERE=cmux
     fi
