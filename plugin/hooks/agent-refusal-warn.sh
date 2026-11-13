@@ -16,9 +16,14 @@ if tool == "MultiEdit": new = " ".join((e.get("new_string") or "") for e in ti.g
 elif tool == "Write": new = ti.get("content") or ""
 else: new = ti.get("new_string") or ""
 hits = sorted(set(m.lower() for m in re.findall(r"\b(refus\w*|rejects?|rejected|blocks?|blocked)\b", new, re.I)))
-if not hits: sys.exit(0)
-msg = ("Refusal wording in an agent file (" + ", ".join(hits) + "). The no-refusals rule: tools return facts "
-       "{status, reason, options|next} and the owner decides. Rewrite as a fact or a named owner decision. Warning only.")
+# G7: a numeric threshold in agent code or copy is a hard-coded decision (warn only; docs may quote thresholds)
+thresholds = re.findall(r"[<>]=?\s*\d+(?:\.\d+)?", new)
+if not hits and not thresholds: sys.exit(0)
+parts = []
+if hits: parts.append("G4 refusal wording (" + ", ".join(hits) + ")")
+if thresholds: parts.append("G7 numeric threshold (" + ", ".join(sorted(set(thresholds))[:5]) + ")")
+msg = ("Agent-file finding: " + "; ".join(parts) + ". The no-refusals rule: tools return facts "
+       "{status, reason, options|next} and the owner decides; no hard-coded decision. Rewrite as a fact or a named owner decision. Warning only.")
 print(json.dumps({"systemMessage": msg, "hookSpecificOutput": {"hookEventName": "PreToolUse", "additionalContext": msg}}, ensure_ascii=False))
 '
 exit 0
