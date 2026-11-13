@@ -162,7 +162,7 @@ def main():
            "If you are the chief: your successor is a new chief session that reads STATE.md, then Outstanding.md and "
            "your handoff file (SKILL.md → Handoff (new chief session)); spawn it, or tell the user in one line to start it.")
     reason = (f"CONTEXT HANDOVER: this session's context is {used:,} tokens (≥ its handover point {limit:,}, role {role}: lib/handoff.py). Hand over "
-              "now, before it runs out: 1) write a Resume Here block in your session file (/agent-ops:session-update); 2) " + who + " 3) append a `status: HANDOFF "
+              "now, before it runs out: 1) write a Resume Here block in your session file (/agent-ops:session-update); 2) " + who + " (if the successor's task file already exists, never write it: read its status and message the successor) 3) append a `status: HANDOFF "
               "<time> … successor: <name>` line to your task file; 4) stop."+ steer_txt)
     print(json.dumps({"decision": "block", "reason": reason}))
     return 0

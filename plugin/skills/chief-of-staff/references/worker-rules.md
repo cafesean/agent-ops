@@ -285,6 +285,10 @@ writes `tasks/<line>-<N+1>.md` and spawns it `--continues <old> --fresh-ok` (`--
 then messages the predecessor. (3) Only then the predecessor stops its Monitor and crons, writes HANDOFF with
 `refs:`, and idles. `stop.sh` exit 7 while a Monitor still runs is expected until step 3.
 
+**Never overwrite a successor's task file.** If `tasks/<line>-<N+1>.md` already exists, do not write it: read its
+status; running → SendMessage the successor for its teach-back, else ask the chief. A write would drop the keys
+spawn.sh stamped and the chief's charter.
+
 **Handover lists uncommitted work.** Every Resume Here has an `Uncommitted work` section: `git status --short` of
 each repo the session touched, each file with its owner or `owner unknown`. The successor's first report marks each
 item committed, handed to an owner, or listed to the user. A session that parks with uncommitted work it owns
