@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.8.0
+Chief of staff: the plugin is now the core chief only; everything specific to one setup moves to a user layer outside the plugin.
+- **User layer** (`COS_USER_DIR`, default `$COS_DIR/user`): `rules.md` (your standing rules for the chief and workers), `bin/` (your scripts), `README.md`. The chief reads `rules.md` right after STATE.md; spawn.sh tells every worker to read it in turn 1; doctor reports it; init creates the skeleton and, for several machines, recommends one synced state folder they all share (config.env stays per machine).
+- **Workers**: role pick (chief / builder / non-dev, `COS_BUILDER_DIRS`) with one rulebook pointer per section of `references/worker-rules.md`; continuity ladder (`--continues`, `--resume`, exit 6 while the old session is warm); per-worker environment command (`COS_SPAWN_ENV_CMD`); handover point per role (`handoff_at`).
+- **Lifecycle**: `reap.sh` + `cos-reap` hook auto-close finished workers through every stop.sh gate; stop.sh refuses while an owned worktree is left behind (exit 9) or the user typed in the session recently (exit 8); `asks.py` keeps "Needs you" true (sweep, checks, short user queue); `ctx.py` and the context-handoff guard hand over before the context fills; `steering-export.py` carries the user's own words to a successor.
+- **Load and cost guards** (hooks, all inactive without the config): heavy-cap-guard, agent-budget-guard with a load5 hysteresis gate, send-cold-guard, cold-cache-warn, ask-guard, worktree-owner.
+- **Alerts**: `next.sh --alert` (queue, reap, asks sweep, dead-man stamps per machine) can pipe new alerts to any notifier via `COS_NOTIFY_CMD` (stdin); an external scheduler runs it. Optional hooks for the user layer: `COS_NEEDS_CHECK_CMD`, `COS_CMUX_HELPERS`, `COS_HEAVY_REMOTE_CMDS`.
+- **Removed from the plugin** (now user-layer scripts if wanted): the scheduler/chat add-on, the remote job runner and its guard hook, the key proxy and secrets add-on, ship tracking (where-it-is, release-gap), cmux pane helpers, multi-account handling. Default machine prefix is now `a`.
+
 ## 0.7.10
 Removed work-specific references (named companies, a private spec path, internal IDs) from `agent-no-refusals`, `agent-rule`, `agent-refusal-warn` and the `plugin-authoring` example. The pointer hooks now match agent, role, guardrail and refusal words only.
 
