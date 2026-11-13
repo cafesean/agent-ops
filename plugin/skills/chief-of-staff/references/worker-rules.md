@@ -97,6 +97,10 @@ resource (SKILL.md § Critical rules; `destroy-guard` hook). Report the facts, t
   code and print `BASE_CHECKOUT_FAILED`; on failure run the base as its own job from a detached worktree of the base
   branch. Start remote jobs with the Bash tool's `run_in_background`, never a trailing `&`, `nohup` or `disown`: the
   detached job is lost and no notice arrives.
+- Several units to check: merge them into ONE temporary worktree and run ONE remote job (tests plus one base/head type
+  compare), not a job per unit; slots are few and a job gives up after waiting too long. For the base run, copy the base
+  versions of the changed files into the tree (`.base/<path>`, restored after): the remote clone's git may lack your
+  commits or have a different parent.
 - Heavy-command detection covers `npm exec`, `npx`, `pnpm exec`, `./node_modules/.bin/` forms, and a copy of the repo in a scratchpad dir. Every one of these runs on the mini.
 
 ## No overdoing
