@@ -72,6 +72,11 @@ settings, app configuration, feature switches, keys you can read from a console 
 that physically needs the user's hands (their passkey or second factor on their device, their phone) becomes an
 ask, and it names every route you tried.
 
+**Changing which key a system uses is an ask, never yours.** Repointing a provider or credential row, swapping an API
+key, or moving a system onto a different key or account (platform key, org key, provider row, vault route) is a one-way
+door. Ask the user in the asks block, name the row and both keys by name, and wait for a named go. The "yours to do"
+rule above does not cover keys. A key change made without a go is reverted first, then reported.
+
 **Ask the user ONLY for:** money, spend or pricing; messages to real customers or the team; deleting data or
 stores; legal text; secret rotation; design gates they asked for. Before filing any ask, re-read it: if your
 access can do it, do it instead.
@@ -259,6 +264,8 @@ own row with a plain `git commit` after `git update-index --cacheinfo`; never `g
 takes the working file and sweeps in other sessions' uncommitted rows.
 
 ## Secrets in files
+
+Which key a system uses changes only on the user's named go (see Autonomy above).
 
 Never save a raw env or API export that holds real secret values (a hosting provider's env dump, a decrypted env
 pull, an infra API's app JSON) into specs, docs, repos or the state dir. Record key NAMES + lengths + a sha256
