@@ -4,8 +4,8 @@
 #   archive.sh [--dry-run] [--all-prefixes]
 #     - tasks/<n>.md with status done|failed|stopped, closed > 24 h ago   → _archive/tasks/
 #     - briefs/: all but the newest 3 timestamped briefs                  → _archive/briefs/
-#   Only this machine's workers (name prefix COS_MACHINE_PREFIX; the host machine also owns the remote
-#   runner's prefix) unless --all-prefixes.
+#   Only this machine's workers (name prefix COS_MACHINE_PREFIX; the host machine also owns legacy unprefixed
+#   names) unless --all-prefixes.
 #   Never touches GOALS.md, STATE.md, Outstanding.md, _heartbeat*, .heartbeat/, .worktrees/ or any add-on file.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -15,17 +15,16 @@ while [ $# -gt 0 ]; do case "$1" in
   --dry-run) DRY=1; shift;; --all-prefixes) ALLP=1; shift;;
   -h|--help) sed -n '2,9p' "$0"; exit 0;;
   *) echo "unknown arg $1" >&2; exit 2;; esac; done
-export COS_REMOTE_MACHINE_PREFIX="${COS_REMOTE_MACHINE_PREFIX:-}"
 cos_python - "$COS_DIR" "$DRY" "$ALLP" "$HERE/lib" <<'PY'
 import os, re, sys, glob, shutil, stat, time
 cos, dry, allp, lib = sys.argv[1], sys.argv[2] == "1", sys.argv[3] == "1", sys.argv[4]
 sys.path.insert(0, lib); import tasks as T
-PFX, HOST, RPFX = os.environ["COS_PREFIX"], os.environ["COS_HOST_PREFIX"], os.environ.get("COS_REMOTE_MACHINE_PREFIX", "")
+PFX, HOST = os.environ["COS_PREFIX"], os.environ["COS_HOST_PREFIX"]
 def own(w):
     if allp: return True
     m = re.match(r"([a-z])-", w or "")
     if not m: return PFX == HOST
-    return m.group(1) == PFX or (PFX == HOST and bool(RPFX) and m.group(1) == RPFX)
+    return m.group(1) == PFX
 now = time.time()
 A = os.path.join(cos, "_archive")
 moves = []

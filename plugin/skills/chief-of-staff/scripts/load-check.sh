@@ -2,7 +2,7 @@
 # Decide where new work can run. Prints one verdict line + the numbers behind it.
 #   LOCAL      — room here
 #   LOCAL_LIGHT— only read-only / small work here (sonnet research, no tsc/vitest/next build)
-#   OFFLOAD    — queue new sessions (or send them to the remote runner add-on)
+#   OFFLOAD    — queue new sessions (queue-run.sh starts them when load drops)
 # CPU gate: load1/cpu > COS_MAX_LOAD_PER_CPU (default 0.85). With COS_LOAD5_ENTER set, the gate is instead
 #   load5/cpu with hysteresis (lib/loadgate.py): OFFLOAD turns on above COS_LOAD5_ENTER (e.g. 1.2) and off only
 #   below COS_LOAD5_LEAVE (default 0.8), so one dip does not release a burst of builds. Not on Windows.

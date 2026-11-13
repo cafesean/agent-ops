@@ -114,7 +114,7 @@ def main():
         return
     why = "load5/core %.2f%s, %s live subagents (cap %d)" % (
         per, " = OFFLOAD" if offload else "", "?" if live < 0 else live, cap)
-    reason = ("Machine overloaded (%s) — wait, or run heavy work on the remote runner when configured. "
+    reason = ("Machine overloaded (%s) — wait, or route heavy work as your user rules say. "
               "Finish with the subagents you have; retry after load5/core < %s and live < %d. "
               "(agent-budget-guard)"
               % (why, os.environ.get("COS_LOAD5_LEAVE") or "0.8", cap))

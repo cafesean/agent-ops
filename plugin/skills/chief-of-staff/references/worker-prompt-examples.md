@@ -4,7 +4,7 @@
 end, teardown at DONE, and no secrets in tool output. Anything stricter is yours to add.
 
 Add standing rules with `COS_WORKER_PROMPT_EXTRA` in `~/.claude/agent-ops/config.env`. Its text is put in
-front of every new worker prompt (local and remote). Keep it to a few sentences: it is sent on every spawn.
+front of every new worker prompt. Keep it to a few sentences: it is sent on every spawn.
 
 ```bash
 COS_WORKER_PROMPT_EXTRA="<rule> <rule> <rule>"

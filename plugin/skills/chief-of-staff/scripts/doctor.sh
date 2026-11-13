@@ -138,14 +138,6 @@ if [ -n "${COS_JIRA_BASE:-}" ]; then
   [ -n "${COS_JIRA_JQL:-}" ] || row WARN "addon jira" "JQL empty — Outstanding shows no Jira items"
 else row PASS "addon jira" "off"; fi
 
-if [ -n "${COS_REMOTE_HOST_KEY:-}" ]; then
-  need_bin ssh FAIL "remote runner needs ssh"
-  [ -f "${COS_INVENTORY:-/nonexistent}" ] && row PASS "remote inventory" "$COS_INVENTORY" || row FAIL "remote inventory" "COS_INVENTORY not a file"
-  [ -n "${COS_REMOTE_USER:-}" ] || row FAIL "remote user" "COS_REMOTE_USER empty"
-  case "${COS_REMOTE_MACHINE_PREFIX:-}" in [a-z]) row PASS "remote prefix" "$COS_REMOTE_MACHINE_PREFIX";; *) row FAIL "remote prefix" "must be one lowercase letter";; esac
-  [ "${COS_REMOTE_MACHINE_PREFIX:-}" = "${COS_MACHINE_PREFIX:-}" ] && row FAIL "remote prefix" "same letter as this machine"
-else row PASS "addon remote runner" "off"; fi
-
 [ -z "${COS_SPAWN_ENV_CMD:-}" ] || { set -- ${COS_SPAWN_ENV_CMD}; command -v "$1" >/dev/null 2>&1 && row PASS "spawn env command" "set (output never shown)" || row WARN "spawn env command" "COS_SPAWN_ENV_CMD not runnable: $1"; }
 
 [ "${COS_ADHD_MODE:-0}" = 1 ] && row PASS "addon adhd mode" "on" || row PASS "addon adhd mode" "off"

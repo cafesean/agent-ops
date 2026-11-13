@@ -16,7 +16,7 @@
 # Default 50, not 60: a ping at idle 59-60 lands past the 1 h prompt cache and re-reads the whole context cold.
 # BLOCKED workers ARE pinged: a worker waiting on the owner keeps its cache warm, so the answer lands on a warm session.
 # DONE/PARKED workers are pinged until 60 min after their DONE/PARKED report (`skip done-1h`); reap.sh closes them.
-# A task with `no_ping: true` is never pinged (a session that has its own wait loop as heartbeat). Remote (tmux) workers are listed, never pinged.
+# A task with `no_ping: true` is never pinged (a session that has its own wait loop as heartbeat).
 # The cos-ck hook turns the 5-character ping into the 3-line protocol (protocols/ck.md). Print launcher:
 # workers have no pane the chief can type into — they are listed, never pinged.
 # Prints one line per worker + a summary; writes nothing to the state dir.
@@ -29,16 +29,15 @@ while [ $# -gt 0 ]; do case "$1" in
   --only) ONLY="$2"; SILENT=-1; shift 2;;
   *) echo "unknown arg $1" >&2; exit 2;; esac; done
 SESS=$("$HERE/sessions.sh" --tsv 2>/dev/null || true)
-export COS_REMOTE_MACHINE_PREFIX="${COS_REMOTE_MACHINE_PREFIX:-}"
 PLAN=$(cos_python - "$COS_DIR" "$SESS" "$SILENT" "$MAXIDLE" "$ONLY" <<'PY'
 import os, re, sys, time, glob
 cosdir, sess, silent, maxidle = sys.argv[1], sys.argv[2], int(sys.argv[3]), int(sys.argv[4])
 only = set(sys.argv[5].split())
-PFX, HOST, RPFX = os.environ["COS_PREFIX"], os.environ["COS_HOST_PREFIX"], os.environ.get("COS_REMOTE_MACHINE_PREFIX", "")
+PFX, HOST = os.environ["COS_PREFIX"], os.environ["COS_HOST_PREFIX"]
 def own(w):
     m = re.match(r"([a-z])-", w or "")
     if not m: return PFX == HOST
-    return m.group(1) == PFX or (PFX == HOST and bool(RPFX) and m.group(1) == RPFX)
+    return m.group(1) == PFX
 now = time.time()
 live = {}
 for l in sess.splitlines()[1:]:
@@ -80,7 +79,7 @@ for w, (where, st, rep, noping, done_since) in sorted(rows.items()):
     elif quiet <= silent: act = "ok"
     elif done_since is not None and now - done_since >= 3600: act = "skip-done-1h"
     elif idle > maxidle: act = "skip-idle"
-    elif not m and not tm: act = "skip-remote" if where.startswith("remote") else "skip-nopane"
+    elif not m and not tm: act = "skip-nopane"
     else: act = "ping"
     print("\t".join([act, w, str(quiet), str(idle), f"workspace:{m.group(1)}" if m else ("tmux" if tm else "-"), m.group(2) if m else (tm.group(1) if tm else "-")]))
 PY

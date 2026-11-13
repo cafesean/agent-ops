@@ -4,7 +4,8 @@
 # addressed machine picks it up. Called by next.sh (so a scheduler can run it with no Claude session alive),
 # by an external scheduler, and by SKILL.md SWEEP.
 #   queue-run.sh [--dry-run] [--max N]      N = most spawns per run (default 2)
-# Per open task addressed to THIS machine (`to:` = COS_MACHINE_PREFIX; the host also takes the remote prefix):
+# Per open task addressed to THIS machine (`to:` = COS_MACHINE_PREFIX; another machine sharing
+#   $COS_DIR runs its own queue-run.sh for its own prefix):
 #   - `approved: false` (a one-way door the owner has not OK'd) → refused, stays open
 #   - `needs:` is set and COS_NEEDS_CHECK_CMD (optional, a user-layer script) exits non-zero for it
 #     (run as `$COS_NEEDS_CHECK_CMD <needs value>`) → refused, stays open (unset → one skip line, not refused)
@@ -29,7 +30,6 @@ while [ $# -gt 0 ]; do case "$1" in
 TPY="$HERE/lib/tasks.py"
 [ -d "$COS_DIR/tasks" ] || exit 0
 PFXS="$COS_PREFIX"
-[ "$COS_PREFIX" != "$COS_HOST_PREFIX" ] || [ -z "${COS_REMOTE_MACHINE_PREFIX:-}" ] || PFXS="$PFXS ${COS_REMOTE_MACHINE_PREFIX}"
 needs_ok() {   # needs_ok VALUE → 0 when the task's needs are met (or no checker is configured)
   if [ -z "${COS_NEEDS_CHECK_CMD:-}" ]; then cos_skip "needs check" "COS_NEEDS_CHECK_CMD not set"; return 0; fi
   $COS_NEEDS_CHECK_CMD "$1" >/dev/null 2>&1

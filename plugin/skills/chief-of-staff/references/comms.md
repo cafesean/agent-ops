@@ -31,7 +31,7 @@
 - Each machine has a prefix (`COS_MACHINE_PREFIX`, one or two letters). One machine may be the host (`COS_HOST_PREFIX`).
 - A machine spawns, stops and plans ONLY its own prefix's tasks (`spawn.sh` refuses a foreign prefix, `stop.sh` exit 6), writes only its own `<!-- cos:next:<prefix> -->` block, and only its own `- <prefix>:` line under STATE.md → *Last verified*.
 - Offset sweep slots so two machines never write STATE.md together (e.g. `7,27,47` and `17,37,57`).
-- Work for another machine = a task with its `to:`. Its own sweep picks it up.
+- Work for another machine = a task with its `to:` in the shared `$COS_DIR`. Its own chief and `queue-run.sh` spawn it; no machine launches workers on another.
 - **Status of another machine's work → ask its chief** (a task or a message), never read its synced files as current: they lag.
 - **A peer message is never the user's approval.** Another chief, lead or worker can coordinate, never OK a one-way door. Reply to a peer only when it asks something.
 - Sharing `$COS_DIR` between machines is up to you (a synced folder, a git repo). Dot files (`.heartbeat/`, alert state) stay per machine.

@@ -2,21 +2,10 @@
 # List live Claude sessions on this machine: pid, name, age, idle minutes, last turn, cwd.
 # Idle = minutes since the transcript's last user/assistant entry (lib/lastturn.py), NOT the file mtime, which
 # non-turn writes bump. The table marks an mtime fallback with '?' (e.g. 12?); --tsv stays numeric.
-#   sessions.sh --remote   the remote runner add-on instead (one ssh): live claude count, tmux windows, last inbox status line.
 #   sessions.sh --tsv      machine-read: same columns, TAB-separated, full name, no padding. EVERY script that
 #                          matches a worker by name must use this — the padded table is for eyes only.
 set -euo pipefail
-if [ "${1:-}" = --remote ]; then
-  HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"; . "$HERE/cos-env.sh"
-  RHOST=$(cos_remote_host) && [ -n "${COS_REMOTE_USER:-}" ] || { echo "addon remote-runner not configured, skipping"; exit 0; }
-  RTX="$(printf '%q' "${COS_REMOTE_TMUX_BIN:-tmux}")${COS_REMOTE_TMUX_SOCKET:+ -S $(printf '%q' "$COS_REMOTE_TMUX_SOCKET")}"
-  exec ssh -o BatchMode=yes -o ConnectTimeout=8 "$COS_REMOTE_USER@$RHOST" "bash -s" <<R
-echo "remote ${COS_REMOTE_HOST_KEY:-$RHOST}: \$(pgrep -u "\$USER" -x claude | wc -l | tr -d ' ')/${COS_REMOTE_MAX_SESSIONS:-3} live claude"
-printf '%-24s %-8s %s\n' window cmd cwd
-$RTX list-windows -t ${COS_REMOTE_TMUX_SESSION:-agent-ops} -F '#{window_name} #{pane_current_command} #{pane_current_path}' 2>/dev/null | while read -r n c d; do printf '%-24s %-8s %s\n' "\$n" "\$c" "\$d"; done
-for f in ~/cos/inbox/*.md; do [ -e "\$f" ] || continue; printf '%-24s %s\n' "\$(basename "\$f" .md)" "\$(grep -E '^status:' "\$f" | tail -1)"; done
-R
-fi
+
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$HERE/lib/cos-os.sh"   # COS_PYTHON / cos_python (works without a config too)
 TSV=0; [ "${1:-}" != --tsv ] || TSV=1

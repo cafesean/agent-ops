@@ -1,6 +1,6 @@
 # File map — what lives where
 
-`$COS_DIR` = the state dir (default `$HOME/agent-ops/state`; set in config.env). Share it between machines if you want (a synced folder or a git repo); dot files and dot folders stay per machine. Each machine has its own prefix (`COS_MACHINE_PREFIX`).
+`$COS_DIR` = the state dir (default `$HOME/agent-ops/state`; set in config.env). Share it between machines if you want (a synced folder or a git repo); dot files and dot folders stay per machine. Each machine has its own prefix (`COS_MACHINE_PREFIX`), runs its own chief and `queue-run.sh`, and spawns only tasks addressed `to: <its prefix>`; the shared folder is the only link between machines (no ssh, no remote launch).
 
 ## In the state dir — the coordination things
 | What | Where | Who writes | Who reads | Which machine |

@@ -37,7 +37,7 @@ Talk and handoff: `references/comms.md` · every file: `references/file-map.md`.
 
 ## Setup
 
-Run `/agent-ops:init` once per machine. It writes `${AGENT_OPS_CONFIG:-$HOME/.claude/agent-ops/config.env}` (never in git, per machine), creates the state dir (`COS_DIR`, default `$HOME/agent-ops/state`) from templates plus the user layer skeleton (`COS_USER_DIR`, default `$COS_DIR/user`), and turns on any add-ons you pick. Several machines share ONE `COS_DIR` (a synced folder), so they share state and the user layer; each keeps its own config.env. A script that finds no config prints "run /agent-ops:init" and exits 1.
+Run `/agent-ops:init` once per machine. It writes `${AGENT_OPS_CONFIG:-$HOME/.claude/agent-ops/config.env}` (never in git, per machine), creates the state dir (`COS_DIR`, default `$HOME/agent-ops/state`) from templates plus the user layer skeleton (`COS_USER_DIR`, default `$COS_DIR/user`), and turns on any add-ons you pick. Several machines share ONE `COS_DIR` (a synced folder), so they share state and the user layer; each keeps its own config.env and prefix, runs its own chief and `queue-run.sh`, and spawns only the tasks addressed `to: <its prefix>`. That shared folder is the only link between machines: workers always run on the machine that spawns them, never over ssh. A script that finds no config prints "run /agent-ops:init" and exits 1.
 
 Scripts run as `${CLAUDE_PLUGIN_ROOT}/skills/chief-of-staff/scripts/<name>.sh` (below, `$S/<name>.sh`). All source `cos-env.sh`; each header comment is the full spec.
 
@@ -161,7 +161,7 @@ Full mechanics: `references/orchestration.md`.
 1. **Session or subagent?** A worker session when the work is long (> 30 min), must outlive this session, or the user will watch or talk to it. Else a subagent returning ≤ 10 lines. A background subagent standing in for a session is a bridge only: say so and move it to a session with `--continues` at its first safe point.
 2. Route the model (below); pass it explicitly.
 3. Write `tasks/<name>.md` (`python3 scripts/lib/tasks.py new tasks/<name>.md --name N --to <prefix> --from <who> --charter <draft>` or by hand); body = the charter template. Every task gets its OWN `task goal:` + `done means:` + `parent goal: <ID>`. No parent fits → add a `confirm?` goal and tell the user, or `--no-goal` (PARK risk). One-way door awaiting the user → `approved: false`.
-4. `spawn.sh --task-file tasks/<name>.md` to start now, or leave `status: open` and the queue spawns it. Another machine's work → `to: <its prefix>`. **Name** `<prefix>-<topic>[-<specifier>][-N]`; `--dir` must be one of `$COS_LAUNCH_DIRS`.
+4. `spawn.sh --task-file tasks/<name>.md` to start now, or leave `status: open` and the queue spawns it. Another machine's work → `to: <its prefix>` (its own chief's queue spawns it there). **Name** `<prefix>-<topic>[-<specifier>][-N]`; `--dir` must be one of `$COS_LAUNCH_DIRS`.
 5. Tell the user one line: name, model, where it runs, what done looks like.
 6. Related issues the user raises go into the SAME worker (append to its task file), not a new one each. An area owned by an earlier line goes to its successor (`--continues`, named `<line>-N`).
 7. Every issue the user raises gets a lane the same turn. An offer ("want me to…?") is a task: file the ask or the task in that turn. The user waiting on something gets an ETA from a counted source and, if needed, a freed slot.
@@ -174,7 +174,7 @@ Detail: `references/autonomy.md`.
 0. Read STATE.md, then `$COS_USER_DIR/rules.md` when present, then this machine's `cos:next` block. **Needs you** first: answer what the chief can, close answered asks (`status: answered` + a `decisions:` line); `💤 park it` → worker hands off, `status: parked`. 💀 died → successor with `--continues`. Stale `_updated` → run `next.sh`. Then `outstanding.sh`.
 1. `queue-run.sh`, then `checkin.sh`, then `asks.py sweep`.
 1a. **Context check**: `ctx.py`. A worker at WARN gets a heads-up line; at NEEDS-YOU (its handover point) it writes Resume Here and the chief spawns its successor (`orchestration.md` → *Continuation*). Measure before any handover; never replace a session that is below its point.
-1b. The user rules name extra sweep scripts (`$COS_USER_DIR/bin`: ship tracking, remote jobs, …) → run them here.
+1b. The user rules name extra sweep scripts (`$COS_USER_DIR/bin`: ship tracking, heavy-job runners, …) → run them here.
 2. `collect.sh`. DONE → verify the artifact (commit, test count, file), then `stop.sh NAME DONE` (it refuses without `session:` and `teardown:`, plus `refs:`/`jira:` when those are configured; ask the worker for what is missing) and dispatch the next step. BLOCKED → unblock if yours, else Needs you. Silent past its heartbeat → `sessions.sh`; a live pid is slow, not dead. Never start a duplicate.
 3. **Drift check**: each live worker's latest report vs its TASK goal (`references/goals.md` → *Drift signals*). Off-goal → 🟡 `drift?` row. Never stop a worker for drift; the user decides.
 4. 🧹 Stale-state rows → close them (`stop.sh`) or ask. `waste-watch.sh` output → 🟡 row naming the worker.
@@ -255,7 +255,7 @@ The plugin is generic and is replaced on every update. Everything that is yours 
 | Path | Holds |
 |---|---|
 | `rules.md` | Your standing rules for the chief and for workers. The chief reads it after STATE.md; spawn.sh tells every worker to read it in turn 1 |
-| `bin/` | Your scripts: remote runners, secrets vaults, schedulers, ship tracking, notifiers. Config keys point at them (`COS_NOTIFY_CMD`, `COS_SPAWN_ENV_CMD`, `COS_NEEDS_CHECK_CMD`, `COS_CMUX_HELPERS`, `COS_HEAVY_REMOTE_CMDS`) |
+| `bin/` | Your scripts: heavy-job runners, secrets vaults, schedulers, ship tracking, notifiers. Config keys point at them (`COS_NOTIFY_CMD`, `COS_SPAWN_ENV_CMD`, `COS_NEEDS_CHECK_CMD`, `COS_CMUX_HELPERS`, `COS_HEAVY_REMOTE_CMDS`) |
 | `README.md` | What each of your scripts does |
 
 Your own hooks go in your own `settings.json`, pointing at `$COS_USER_DIR/bin`, never into the plugin. A new standing rule from the user is written to `rules.md` the same turn. With more than one machine, put `COS_DIR` in a synced folder so every machine shares state and the user layer; `config.env` stays per machine.
@@ -268,7 +268,6 @@ Each is off by default; core never needs one.
 |---|---|
 | Focus-aware mode (`COS_ADHD_MODE=1`) | One screen, answer first, novelty guard: `references/addons/adhd.md` |
 | cmux launcher (`COS_LAUNCHER=cmux`) | Workers open as panes in the chief's workspace; layout/colour helpers come from `COS_CMUX_HELPERS` when set (`references/comms.md` → *Panes*) |
-| Remote workers (`spawn.sh --remote`, `COS_REMOTE_*`) | Workers in tmux on another machine over ssh |
 | Push alerts (`COS_NOTIFY_CMD`) | `next.sh --alert` text on stdin to your notifier; an external scheduler (cron, launchd, a scheduler agent) runs `next.sh --alert` or a headless sweep |
 
 Per-worker environment (a different config dir, a proxy, credentials from your own store) is generic: set `COS_SPAWN_ENV_CMD` to a command that prints `KEY=value` lines; spawn.sh exports them into that worker's launch script only.

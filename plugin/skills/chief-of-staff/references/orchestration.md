@@ -66,7 +66,7 @@ Rules: top-level `key: value`, flow lists `[a, b]`, block lists of flat maps (`a
 1. **Write the task**: `python3 $S/lib/tasks.py new tasks/<name>.md --name N --to <prefix> --from <who> --charter <draft>` (or by hand).
 2. **Start now**: `$S/spawn.sh --task-file tasks/<name>.md [--continues OLD] [--agent X] [--light] [--force] [--dry-run] [--no-goal]` (flags override frontmatter). `to:` must be this machine's prefix and status `open|claimed`.
 3. **Or queue it**: leave `status: open`. `queue-run.sh` (from `next.sh`, from SWEEP) takes open tasks with `to:` = this machine, refuses `approved: false` and unmet `needs:` (each refusal printed once), claims by rename (only one process wins), runs `spawn.sh --task-file`. A failed spawn goes back to `open` with the exit code. `--max N` (default 2), `--dry-run`.
-4. **Another machine**: write the task with `to: <its prefix>`, status open; its own sweep picks it up.
+4. **Another machine**: write the task with `to: <its prefix>`, status open, in the shared `$COS_DIR`; that machine's own chief and `queue-run.sh` spawn it there. This is the only multi-machine path: spawn.sh never launches a worker on another machine.
 
 spawn.sh gates: `task goal:` missing or parent missing/unknown/parked → exit 2 (`--no-goal` overrides, PARK risk); `--dir` not in `$COS_LAUNCH_DIRS` → exit 2; bad name → exit 2; foreign prefix → refused; load `OFFLOAD` → exit 3 unless `--light`/`--force`. The launcher (`COS_LAUNCHER=tmux|cmux|wt|print`) decides where the worker opens; `print` is a manual fallback that only prints the `claude` command for the user to paste, so a queued task it "spawns" does not run until the user starts it. The launch script exports `COS_WORKER`, `COS_TAG`, `COS_REPORT_FILE`, `COS_HEARTBEAT_DIR` for the hooks.
 

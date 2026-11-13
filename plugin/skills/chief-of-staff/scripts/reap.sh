@@ -12,7 +12,7 @@
 #    User-typed gate: a session where the user typed a turn (transcript origin.kind human) < COS_REAP_IDLE_MIN ago is
 #    never reaped, whatever idle or its DONE line says — a DONE report is the worker's claim, not the user's.
 #    Leads gate: a lead named in column 3 of $COS_DIR/LEADS (`<prefix> · <domain> · <lead> · <scope>`) is PERSISTENT —
-#    never reaped; only a handover successor replaces it. Never the chief, never a remote (`where: remote:`) task.
+#    never reaped; only a handover successor replaces it. Never the chief.
 # --ended NAME   NAME's session is ending, so its own still-running pid does not count as live.
 # --only NAME    one worker only.
 # --schedule NAME  Stop-hook mode: if NAME is a stop candidate (DONE / parked), start ONE detached
@@ -39,9 +39,9 @@ plan() {
   local sess; sess=$(if [ -n "${COS_REAP_SESSIONS_TSV:-}" ]; then cat "$COS_REAP_SESSIONS_TSV"; else "$HERE/sessions.sh" --tsv; fi 2>/dev/null)   # override: tests only || { echo "reap: sessions.sh failed — nothing done (liveness unknown)" >&2; return 1; }
   [ -n "$sess" ] || { echo "reap: sessions.sh empty — nothing done (liveness unknown)" >&2; return 1; }
   COS_SESS="$sess" cos_python - "$COS_DIR" "$HERE/lib" \
-    "$ONLY" "$ENDED" "${COS_REAP_IDLE_MIN:-60}" "$COS_PREFIX" "$COS_HOST_PREFIX" "${COS_REMOTE_MACHINE_PREFIX:-}" <<'PY'
+    "$ONLY" "$ENDED" "${COS_REAP_IDLE_MIN:-60}" "$COS_PREFIX" "$COS_HOST_PREFIX" <<'PY'
 import json, os, re, sys, time
-cosdir, lib, only, ended, idle_min, pfx, host, rpfx = sys.argv[1:]
+cosdir, lib, only, ended, idle_min, pfx, host = sys.argv[1:]
 sys.path.insert(0, lib); import tasks as T
 live, idle = {}, {}
 for l in os.environ.get("COS_SESS", "").splitlines()[1:]:   # stdin is this script (heredoc)
@@ -55,7 +55,7 @@ if ended and live.get(ended, 0) <= 1: live.pop(ended, None)   # its own ending p
 def own(w):   # mirror of cos-env.sh cos_own
     m = re.match(r"([a-z])-", w or "")
     if not m: return pfx == host
-    return m.group(1) == pfx or (pfx == host and bool(rpfx) and m.group(1) == rpfx)
+    return m.group(1) == pfx
 CLOSED = {"done", "stopped", "failed"}
 STAT = re.compile(r"status:\s*\**\s*(STARTED|RESUMED|WORKING|BLOCKED|DONE|FAILED|PARKED|STOPPED)\b")
 STARTED = re.compile(r"status:\s*\**\s*STARTED\b")
@@ -75,7 +75,7 @@ for p, fm in rows:
     if n == "chief" or re.search(r"(^|-)chief(-|$)", n): continue          # never the chief
     if n in LEADS: continue                                                # never a LEADS lead (persistent)
     st = str(fm.get("status") or "").lower()
-    if st in CLOSED or "remote:" in str(fm.get("where") or ""): continue
+    if st in CLOSED: continue
     try: _, body = T.read(p)
     except Exception: continue
     lines = T.reports(body).split("\n")

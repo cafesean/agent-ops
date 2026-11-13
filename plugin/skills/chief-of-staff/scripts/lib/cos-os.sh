@@ -50,17 +50,14 @@ cos_path() {  # only touches strings that look like Windows paths; everything el
 }
 
 cos_path_list() {  # split on ':' but re-join a lone drive letter with the next part (C:\x, C:/x)
-  local IFS=: out="" pend="" p l r
+  local IFS=: out="" pend="" p
   # shellcheck disable=SC2086
   set -f; set -- $1; set +f
   for p in "$@"; do
     if [ -n "$pend" ]; then p="$pend:$p"; pend=""
     elif [ "${#p}" = 1 ] && case "$p" in [A-Za-z]) true;; *) false;; esac; then pend="$p"; continue
     fi
-    case "$p" in
-      *=*) l="${p%%=*}"; r="${p#*=}"; p="$(cos_path "$l")=$r";;   # LOCAL=REMOTE pairs: only LOCAL is a local path
-      *) p="$(cos_path "$p")";;
-    esac
+    p="$(cos_path "$p")"
     out="${out:+$out:}$p"
   done
   [ -z "$pend" ] || out="${out:+$out:}$pend"

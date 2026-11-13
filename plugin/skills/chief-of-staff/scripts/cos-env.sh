@@ -13,7 +13,7 @@ cos_source_config "$COS_CONFIG"   # CRLF-tolerant
 for _v in COS_DIR COS_USER_DIR COS_OUTSTANDING COS_VAULT COS_MONOREPO COS_INVENTORY; do
   eval "_x=\${$_v:-}"; [ -z "$_x" ] || eval "$_v=\$(cos_path \"\$_x\")"
 done
-for _v in COS_LAUNCH_DIRS COS_REMOTE_LAUNCH_DIRS; do
+for _v in COS_LAUNCH_DIRS; do
   eval "_x=\${$_v:-}"; [ -z "$_x" ] || eval "$_v=\$(cos_path_list \"\$_x\")"
 done
 unset _v _x
@@ -37,22 +37,18 @@ export COS_CONFIG COS_DIR COS_USER_DIR COS_OUTSTANDING COS_LAUNCHER COS_MACHINE_
 mkdir -p "$COS_DIR/tasks" "$COS_DIR/briefs"
 
 # Per-machine ownership: each machine writes only the tasks whose name starts with its own prefix
-# (COS_MACHINE_PREFIX). The host machine (COS_HOST_PREFIX, default: this machine's prefix) also owns the remote runner's
-# workers (COS_REMOTE_MACHINE_PREFIX) and legacy names without a `<letter>-` prefix.
+# (COS_MACHINE_PREFIX). The host machine (COS_HOST_PREFIX, default: this machine's prefix) also owns legacy names
+# without a `<letter>-` prefix. Several machines share one $COS_DIR (a synced folder); each runs its own chief and
+# queue-run.sh and spawns only the tasks addressed `to: <its prefix>`.
 COS_PREFIX="$COS_MACHINE_PREFIX"
 COS_HOST_PREFIX="${COS_HOST_PREFIX:-$COS_MACHINE_PREFIX}"
 export COS_PREFIX COS_HOST_PREFIX
 cos_own() {   # cos_own NAME → 0 when this machine may write NAME's task file
   case "$1" in
     "$COS_PREFIX"-*) return 0;;
-    [a-z]-*) [ "$COS_PREFIX" = "$COS_HOST_PREFIX" ] && [ -n "${COS_REMOTE_MACHINE_PREFIX:-}" ] && [ "${1%%-*}" = "$COS_REMOTE_MACHINE_PREFIX" ];;
+    [a-z]-*) return 1;;
     *) [ "$COS_PREFIX" = "$COS_HOST_PREFIX" ];;
   esac
-}
-cos_remote_host() {  # print the remote runner host (add-on); exit 1 when not configured
-  if [ -n "${COS_REMOTE_HOST:-}" ]; then printf '%s\n' "$COS_REMOTE_HOST"; return 0; fi
-  [ -n "${COS_INVENTORY:-}" ] && [ -f "$COS_INVENTORY" ] && [ -n "${COS_REMOTE_HOST_KEY:-}" ] || return 1
-  cos_python -c "import yaml,sys;print(yaml.safe_load(open(sys.argv[1]))['hosts'][sys.argv[2]]['ip'])" "$COS_INVENTORY" "$COS_REMOTE_HOST_KEY" 2>/dev/null
 }
 cos_tmux() {  # tmux on the agent-ops server: COS_TMUX_SOCKET = socket name (-L) or path (-S); unset = default server
   case "${COS_TMUX_SOCKET:-}" in

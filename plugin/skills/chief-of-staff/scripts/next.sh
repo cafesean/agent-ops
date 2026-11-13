@@ -24,7 +24,7 @@
 #   sessions.sh (live pids). Read-only on all of them.
 # Exit 1 when a mission file fails to parse (NEXT.md is still written, with the broken file flagged).
 # Per machine: plans ONLY this machine's missions (cos-env.sh cos_own: prefix $COS_MACHINE_PREFIX; the host
-#   also owns remote + legacy names) and writes them into ITS block of $COS_OUTSTANDING, between
+#   also owns legacy unprefixed names) and writes them into ITS block of $COS_OUTSTANDING, between
 #   `<!-- cos:next:<prefix> -->` markers — never another machine's block. The host (COS_HOST_PREFIX) also writes
 #   NEXT.md (compat). A non-host machine with 0 own mission files writes nothing and says why (exit 0).
 # Stale state: LEDGER STARTED rows whose mission is closed, asks open > 1 day; host block also flags
@@ -50,18 +50,18 @@ touch "$COS_DIR/_heartbeat.$COS_PREFIX" 2>/dev/null || true   # dead-man stamp o
 SESS=$("$HERE/sessions.sh" --tsv 2>/dev/null || true)
 export COS_LIB="$HERE/lib"
 export COS_DEADMAN_PREFIXES="${COS_DEADMAN_PREFIXES:-}" COS_DEADMAN_MIN="${COS_DEADMAN_MIN:-40}" COS_DEADMAN_HOURS="${COS_DEADMAN_HOURS:-8-22}"
-export COS_REMOTE_MACHINE_PREFIX="${COS_REMOTE_MACHINE_PREFIX:-}" COS_GOALS="${COS_GOALS:-$COS_DIR/GOALS.md}" COS_OUTSTANDING="${COS_OUTSTANDING:-}"
+export COS_GOALS="${COS_GOALS:-$COS_DIR/GOALS.md}" COS_OUTSTANDING="${COS_OUTSTANDING:-}"
 cos_python - "$COS_DIR" "$ALERT" "$SRC" "$SESS" <<'PY'
 import json, os, re, sys, glob, datetime as dt
 sys.path.insert(0, os.environ["COS_LIB"]); import tasks as T
 cosdir, alert, src, sess = sys.argv[1], sys.argv[2] == "1", sys.argv[3], sys.argv[4]
 now = dt.datetime.now()
-PFX, HOST, RPFX = os.environ["COS_PREFIX"], os.environ["COS_HOST_PREFIX"], os.environ.get("COS_REMOTE_MACHINE_PREFIX", "")
+PFX, HOST = os.environ["COS_PREFIX"], os.environ["COS_HOST_PREFIX"]
 IS_HOST = PFX == HOST
 def own(w):   # mirror of cos-env.sh cos_own
     m = re.match(r"([a-z])-", w or "")
     if not m: return IS_HOST
-    return m.group(1) == PFX or (IS_HOST and bool(RPFX) and m.group(1) == RPFX)
+    return m.group(1) == PFX
 DONE_ST = {"code_complete", "done", "complete", "completed", "verified", "passed", "shipped", "merged"}
 SKIP_ST = {"cancelled", "canceled", "dropped", "superseded", "skipped", "wontfix"}
 ACTIVE_ST = {"in_progress", "active", "building", "wip", "in-progress"}
@@ -253,12 +253,11 @@ for w, m in missions.items():
         if ib["status"] == "DONE" and r["mstatus"] == "active": r["now"] += " · verify, then set mission status: done"
         if m.get("handoff"): r["now"] += f" → handoff: {short(m['handoff'], 120)}"
     else:
-        is_remote = led.get("where", "").startswith("remote")
         led_closed = bool(re.match(r"(STOPPED|ENDED|CLOSED|DONE|FAILED)", led.get("status", ""), re.I)) or "CLOSED" in led.get("status", "")
         if ib["status"] == "BLOCKED":
             need = next((b for b in ib["bullets"] if re.search(r"NEEDS|owner|chief", b)), last)
             r["reasons"].insert(0, "BLOCKED: " + short(need, 110)); r["kind"] = "blocked"
-        if ib["status"] in ("STARTED", "WORKING", "BLOCKED") and not is_remote and w not in live:
+        if ib["status"] in ("STARTED", "WORKING", "BLOCKED") and w not in live:
             r["reasons"].insert(0, "worker gone — LEDGER " + short(led.get("status") or "no row", 30) + " → spawn successor from mission"
                                 if led_closed else "worker died (no live pid) → spawn successor from mission")
             r["kind"] = "died"
@@ -305,7 +304,7 @@ for w, led in ledger.items():
     ibp = os.path.join(cosdir, (m or {}).get("inbox") or f"inbox/{w}.md")
     quiet_d = (now - dt.datetime.fromtimestamp(os.path.getmtime(ibp))).days if os.path.exists(ibp) else 99
     if ms not in ("done", "parked", "stopped") and ibs not in ("DONE", "FAILED") and w not in live \
-            and not led.get("where", "").startswith("remote") and quiet_d >= 1 and ms != "active":
+            and quiet_d >= 1 and ms != "active":
         stale_st.append(f"LEDGER `{w}` still {led['status'].split()[0]}, no live pid, quiet {quiet_d}d → `stop.sh {w} STOPPED` (then archive.sh)")
         continue
     if ms in ("done", "parked", "stopped") or ibs in ("DONE", "FAILED"):

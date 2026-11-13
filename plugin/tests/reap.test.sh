@@ -9,7 +9,7 @@ trap 'for p in $(pgrep -f "$T"); do kill "$p" 2>/dev/null; done; rm -rf "$T"' EX
 mkdir -p "$T/cos/tasks"
 printf 'COS_DIR=%q\nCOS_MACHINE_PREFIX=a\nCOS_HOST_PREFIX=a\n' "$T/cos" > "$T/config.env"
 export AGENT_OPS_CONFIG="$T/config.env" COS_REAP_SESSIONS_TSV="$T/sess.tsv" COS_REAP_STOP="$T/stop"
-unset COS_WORKER COS_REAP COS_DIR COS_MACHINE_PREFIX COS_HOST_PREFIX COS_REMOTE_MACHINE_PREFIX   # a worker running the test must not leak its own
+unset COS_WORKER COS_REAP COS_DIR COS_MACHINE_PREFIX COS_HOST_PREFIX   # a worker running the test must not leak its own
 export COS_REAP_IDLE_MIN=3   # fixtures use minute-scale idles; the shipped default is 60 (checked below)
 PASS=0 FAIL=0
 ok()   { PASS=$((PASS+1)); printf 'ok   %s\n' "$1"; }

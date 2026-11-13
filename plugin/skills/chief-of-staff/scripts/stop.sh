@@ -25,7 +25,7 @@
 # Subagent gate: before killing, read the worker's screen (tmux capture-pane for `tmux <target>`, cmux read-screen for
 #   `ws<N>/surface:<M>`, else the cmux surface whose tab title = NAME). Refuse (exit 7) unless --force when the screen
 #   has a running-task line `◯ <text> <elapsed>` (elapsed `3m 11s` or `12s ·`). Footer markers `← N agent(s)` /
-#   `· N shell(s)` are ignored (they persist after agents finish). Screen unreadable = WARN and continue; remote skipped.
+#   `· N shell(s)` are ignored (they persist after agents finish). Screen unreadable = WARN and continue.
 # Close: sets the task `status: done|failed|stopped|parked` + a `closed:` stamp, so no live task outlives its worker.
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -171,7 +171,7 @@ subagent_check() {  # subagent_check SCREEN LABEL
     echo "--force: stopping $NAME with subagents running" >&2
   fi
 }
-if [[ "$GW" == *remote:* ]] || [[ "$GW" == "wt "* ]]; then :
+if [[ "$GW" == "wt "* ]]; then :
 elif [[ "$GW" =~ ^tmux\ (.+)$ ]]; then
   TGT="${BASH_REMATCH[1]}"
   if command -v tmux >/dev/null 2>&1; then subagent_check "$(cos_tmux capture-pane -p -t "$TGT" 2>/dev/null || true)" "tmux pane $TGT"; fi
@@ -189,15 +189,7 @@ for f in "$HOME"/.claude/sessions/*.json; do
     pid=$(basename "$f" .json); kill -9 "$pid" 2>/dev/null || { [ "$COS_OS" = windows ] && taskkill //PID "$pid" //F >/dev/null 2>&1; } || true; rm -f "$f" "$HOME/.claude/sessions/$pid".*.key; echo "killed pid $pid"
   fi
 done
-# Remote worker (where = remote:…): kill its tmux window on the remote runner (claude gets SIGHUP).
-RTS="${COS_REMOTE_TMUX_SESSION:-agent-ops}"
 if [ "$DRY" = 1 ]; then echo "DRY-RUN: would close $NAME's pane/window ($(where_of))"
-elif where_of | grep -q 'remote:'; then
-  if RHOST=$(cos_remote_host) && [ -n "${COS_REMOTE_USER:-}" ]; then
-    ssh -o BatchMode=yes -o ConnectTimeout=8 "$COS_REMOTE_USER@$RHOST" \
-      "$(printf '%q' "${COS_REMOTE_TMUX_BIN:-tmux}")${COS_REMOTE_TMUX_SOCKET:+ -S $(printf '%q' "$COS_REMOTE_TMUX_SOCKET")} kill-window -t $RTS:$NAME" \
-      && echo "closed remote tmux window $RTS:$NAME" || echo "WARN: no remote tmux window $RTS:$NAME (already gone?)" >&2
-  else cos_skip "remote close" "remote runner add-on not configured"; fi
 elif where_of | grep -qE '^wt '; then
   echo "note: Windows Terminal tab \"$NAME\" stays open (wt.exe cannot close tabs) — close it by hand"
 elif where_of | grep -qE '^tmux '; then

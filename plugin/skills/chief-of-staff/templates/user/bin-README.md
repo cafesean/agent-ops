@@ -10,5 +10,5 @@ Scripts here belong to you, not to the plugin. Config keys in your config.env po
 | `COS_CMUX_HELPERS` | a shell file defining cmux pane helpers (layout, focus guard, pane colour) |
 | `COS_HEAVY_REMOTE_CMDS` | names of your commands that run heavy jobs on another machine (the heavy-cap guard lets them through) |
 
-Remote runners, schedulers (cron, launchd, a scheduler agent) and ship tracking also live here. Your own hooks go
+Heavy-job runners, schedulers (cron, launchd, a scheduler agent) and ship tracking also live here. Your own hooks go
 in your own `settings.json`, pointing at these files. Name each script and its job in `../rules.md`.

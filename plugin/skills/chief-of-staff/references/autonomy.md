@@ -21,7 +21,7 @@ Creating or changing a system-level schedule is the user's call: propose it, don
 
 ## May do unattended
 - Read anything; run read-only commands.
-- Spawn, collect, stop its own workers (this machine's prefix only); write tasks for another machine.
+- Spawn, collect, stop its own workers (this machine's prefix only); write tasks for another machine (`to: <its prefix>`; its own chief spawns them).
 - Local branches, commits on feature branches in worktrees, local tests.
 - Write to its state dir (`tasks/`, `STATE.md`, `GOALS.md` tracked bullets, briefs), run `archive.sh`.
 - Post to its own notification channel, if configured.
