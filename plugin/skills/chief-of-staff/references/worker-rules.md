@@ -127,7 +127,9 @@ resource (SKILL.md § Critical rules; `destroy-guard` hook). Report the facts, t
 Unsure → Tier 1, and say so. Subagents follow the same tiers. A release request also needs the full-repo
 type-check against the base error list (0 new): a check filtered to changed files misses a duplicate declaration
 that breaks the build. Run base and head in ONE job and report `exit=<code> lines=<n> errors=<count>` per side
-plus the error diff; a count of 0 with no exit code is not evidence.
+plus the error diff; a count of 0 with no exit code is not evidence. Exit 134/137 or no `error TS` lines means the
+type-checker died, not clean: raise the heap (`NODE_OPTIONS=--max-old-space-size=<MB>`) and re-run. When the remote
+machine cannot give a real base-vs-head, send the request and say so; the release owner's gate judges it.
 
 Dev is the integration test. A change reaches dev only through the release owner, after it passes locally. The
 release request carries `local: <what ran locally + result>`; a change that cannot run locally says why there.
