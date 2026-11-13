@@ -44,7 +44,7 @@ spawn.sh puts the short form into workers (`worker-rules.md` → *Subagents*); t
 - **Foreground only:** long steps run in ONE foreground Bash call with a long timeout; start a server with
   `(nohup … &)` and poll it inside the same command. Never `run_in_background`, never Monitor, never "wait for a
   signal": completion notices wake the MAIN session, never a subagent, so it idles forever.
-- **Short report** ≤ 10 lines; a full report over ~4k chars → write it to the scratchpad and reply with the path
+- **Short report** in caveman ultra, ≤ 10 lines; a full report over ~4k chars → write it to the scratchpad and reply with the path
   (idle-notification results truncate).
 - **Absolute paths / `git -C <abs>`:** the shell cwd resets between Bash calls; a bare `git` can run in a sibling
   repo that has the same branch name.

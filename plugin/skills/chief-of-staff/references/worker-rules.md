@@ -201,6 +201,11 @@ check `sessions.sh --tsv` (live row + pid) or the CHIEF / CAPTAIN / LEADS files.
   ONE SendMessage status question. Never idle silently on another session.
 - **Depended-on sessions answer at once.** A status question about a deploy, fix or review gets a reply in the
   same turn it arrives, before other work.
+- **Compact messages.** Every SendMessage and cos-msg is caveman ultra: at most 3 lines, about 60 words. Line 1 =
+  `<from>→<to>: <verb> <object>`. Then facts only: id, sha7, number, path. No recap, no restating the ask, no rule
+  quotes, no greeting, no closing line. Detail stays in the task Reports or the session file: send the path, never the
+  content. Teach-back = rule numbers + 2–4-word keys; the reply is `tb ok N/N` or only the corrections. Short forms: RR
+  release-request · RH Resume Here · tb teach-back · ctx context · HO handover · PR prod · DV dev.
 - A cold session (last turn older than `COS_SEND_COLD_MIN`, default 50 min) is not messaged: its cache is gone.
   The send-cold-guard hook denies it; spawn a successor with `--continues` instead.
 

@@ -245,6 +245,7 @@ Detail: `references/tokens-and-sessions.md`.
 - **Session log at the end only.** A worker writes its session log with `/agent-ops:session-update` when its whole task is finished, never mid-task.
 - **Every charter carries the *Pre-authorized* block** (template in `references/orchestration.md`).
 - **Session-to-session messages go via `SendMessage` to the session name**, never typed into a pane except as a verified fallback (`references/comms.md`).
+- **Messages are compact:** `references/worker-rules.md` § Messaging.
 - **Status questions → `collect.sh` first** before any recon subagent.
 - **Heartbeats are hooks, not tokens**: a hook touches `.heartbeat/<worker>`; another turns a `⟦CK⟧` ping into one report line (`protocols/ck.md`). Hooks arm only in sessions started after a plugin update; never restart live sessions for it.
 - **Wind down before park or stop** (`references/worker-rules.md` → *Wind-down and teardown*). The chief never `--force`s past a stop.sh gate without first filling the gap itself.
