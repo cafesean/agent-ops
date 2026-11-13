@@ -2,7 +2,7 @@
 # Latest report of every worker: task files (tasks/<name>.md) first, then legacy inboxes (inbox/<name>.md)
 # of workers that have no task file. Remote workers' reports (~/cos/inbox/<name>.md on the remote runner add-on) are pulled
 # and their new lines appended under `## Reports` of the matching task file (legacy: copied into inbox/).
-#   collect.sh          summary: worker · status · age_m · last line
+#   collect.sh          summary: worker · status · age_m · last turn (live sessions, lib/lastturn.py) · last line
 #   collect.sh NAME     the full task file (or legacy inbox) of one worker
 set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -35,13 +35,15 @@ cos_python - "$COS_DIR" "$HERE/lib" <<'PY'
 import os, re, sys, time, glob
 cos, lib = sys.argv[1:]
 sys.path.insert(0, lib); import tasks as T
+from lastturn import live_turns, label
 now = time.time()
-print(f"{'worker':24} {'status':10} {'age_m':>6}  last")
+turns = live_turns()   # last real turn of each LIVE local session: old = cache cold, never SendMessage it
+print(f"{'worker':24} {'status':10} {'age_m':>6} {'last turn':20}  last")
 seen = set()
 def row(name, st, path, text):
     lines = [l for l in text.split("\n") if l.strip() and not l.startswith("#") and not l.startswith("---")]
     last = lines[-1][:90] if lines else ""
-    print(f"{name:24} {st:10} {int((now - os.path.getmtime(path)) / 60):>6}  {last}")
+    print(f"{name:24} {st:10} {int((now - os.path.getmtime(path)) / 60):>6} {label(turns.get(name), now):20}  {last}")
 for p, fm in T.list_tasks(cos):
     seen.add(fm.get("name"))
     body = open(p, encoding="utf-8", errors="ignore").read()

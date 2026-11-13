@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# List live Claude sessions on this machine: pid, name, age, idle minutes, account, cwd.
-# Idle = minutes since the session transcript was last written. Account = the LEDGER `account` column of the
-# worker's last row (a, b…); `-` = not a chief-spawned worker or a row with no account (both run on a).
+# List live Claude sessions on this machine: pid, name, age, idle minutes, last turn, cwd.
+# Idle = minutes since the transcript's last user/assistant entry (lib/lastturn.py), NOT the file mtime, which
+# non-turn writes bump. The table marks an mtime fallback with '?' (e.g. 12?); --tsv stays numeric.
 #   sessions.sh --remote   the remote runner add-on instead (one ssh): live claude count, tmux windows, last inbox status line.
 #   sessions.sh --tsv      machine-read: same columns, TAB-separated, full name, no padding. EVERY script that
 #                          matches a worker by name must use this — the padded table is for eyes only.
@@ -19,10 +19,10 @@ R
 fi
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$HERE/lib/cos-os.sh"   # COS_PYTHON / cos_python (works without a config too)
-LEDGER=$( ( . "$HERE/cos-env.sh" >/dev/null 2>&1 && printf '%s' "$COS_DIR/LEDGER.md" ) || true)   # its dir's tasks/ too
 TSV=0; [ "${1:-}" != --tsv ] || TSV=1
-cos_python - "$LEDGER" "$TSV" <<'PY'
+cos_python - "$TSV" "$HERE/lib" <<'PY'
 import json, os, glob, time, re, sys
+sys.path.insert(0, sys.argv[2]); from lastturn import last_turn, label
 now = time.time()
 def pid_alive(pid):
     # NEVER os.kill(pid, 0) on Windows: there it calls TerminateProcess and kills the session.
@@ -39,24 +39,6 @@ def pid_alive(pid):
     try: os.kill(pid, 0); return True
     except PermissionError: return True
     except Exception: return False
-acct = {}
-if sys.argv[1] and os.path.exists(sys.argv[1]):
-    for l in open(sys.argv[1], encoding="utf-8", errors="ignore"):
-        c = [x.strip() for x in l.strip().strip("|").split("|")]
-        if len(c) >= 7 and re.match(r"\d{4}-\d\d-\d\d", c[0]):
-            acct[c[1]] = c[7] if len(c) >= 8 and re.fullmatch(r"[a-z][a-z0-9]{0,5}", c[7]) else "-"
-
-    for _d in [os.path.join(os.path.dirname(sys.argv[1]), "tasks")]:   # task files carry the account
-        for _f in (sorted(os.listdir(_d)) if os.path.isdir(_d) else []):
-            if not _f.endswith(".md") or _f.startswith("."): continue
-            _fm = {}
-            _L = open(os.path.join(_d, _f), encoding="utf-8", errors="ignore").read().split("\n")
-            if _L and _L[0] == "---":
-                for _l in _L[1:]:
-                    if _l == "---": break
-                    _m = re.match(r"(name|account):\s*(.*)", _l)
-                    if _m: _fm[_m.group(1)] = _m.group(2).strip().strip("\"'")
-            if _fm.get("account"): acct[_fm.get("name") or _f[:-3]] = _fm["account"]
 rows = []
 for f in glob.glob(os.path.expanduser("~/.claude/sessions/*.json")):
     try: d = json.load(open(f))
@@ -66,16 +48,17 @@ for f in glob.glob(os.path.expanduser("~/.claude/sessions/*.json")):
     cwd = d.get("cwd") or ""
     proj = re.sub(r"[^A-Za-z0-9]", "-", cwd) if os.name == "nt" else cwd.replace("/", "-").replace(".", "-")
     tr = os.path.expanduser(f"~/.claude/projects/{proj}/{d.get('sessionId')}.jsonl")
-    idle = int((now - os.path.getmtime(tr)) / 60) if os.path.exists(tr) else -1
+    lt, exact = last_turn(tr)
+    idle = max(0, int((now - lt) / 60)) if lt >= 0 else -1
     age = int((now - (d.get("startedAt") or now*1000)/1000) / 60)
-    rows.append((alive, d.get("name") or "-", pid, age, idle, d.get("kind"), cwd))
+    rows.append((alive, d.get("name") or "-", pid, age, idle, exact or idle < 0, cwd, lt))
 rows.sort(key=lambda r: (not r[0], r[4] if r[4] >= 0 else 10**9))
-tsv = sys.argv[2] == "1"
+tsv = sys.argv[1] == "1"
 w = max([22] + [len(r[1]) for r in rows])   # widen to the longest name — never cut it
-if tsv: print("\t".join(["state", "name", "pid", "age_m", "idle_m", "acct", "cwd"]))
-else: print(f"{'state':6} {'name':{w}} {'pid':>7} {'age_m':>6} {'idle_m':>6} {'acct':4}  cwd")
-for alive, name, pid, age, idle, kind, cwd in rows:
+if tsv: print("\t".join(["state", "name", "pid", "age_m", "idle_m", "cwd"]))
+else: print(f"{'state':6} {'name':{w}} {'pid':>7} {'age_m':>6} {'idle_m':>6} {'last turn':20}  cwd")
+for alive, name, pid, age, idle, exact, cwd, lt in rows:
     state = "live" if alive else "DEAD"
-    if tsv: print("\t".join([state, re.sub(r"[\t\r\n]+", " ", name), str(pid), str(age), str(idle), acct.get(name, "-"), cwd]))
-    else: print(f"{state:6} {name:{w}} {pid:>7} {age:>6} {idle:>6} {acct.get(name, '-'):4}  {cwd}")
+    if tsv: print("\t".join([state, re.sub(r"[\t\r\n]+", " ", name), str(pid), str(age), str(idle), cwd]))
+    else: print(f"{state:6} {name:{w}} {pid:>7} {age:>6} {str(idle) + ('' if exact else '?'):>6} {label(lt, now):20}  {cwd}")
 PY
