@@ -230,6 +230,8 @@ and it gets a roster row the same turn. Tests and evals run as the lane owner's 
 over keeps the lane: successor `--continues`, roster row updated. A builder that finds an issue outside its lane
 sends it to the lead, never fixes it or spawns for it.
 
+A LEADS session that goes cold (past the cache window, or its pid gone) is replaced the same turn: the chief spawns a successor `--continues <old>` and updates the LEADS row to its name. Never ping the cold lead.
+
 **Topic journal.** Each lead keeps `$COS_DIR/teams/<domain>-topics.md`: at most 10 open problems, each with name, every
 user quote on it (with time), current understanding (cause, evidence, ids), owner session, next step, status and
 `updated HH:MM`. The lead updates a topic in the same turn the user says anything on it and at every handover; repeated
