@@ -95,7 +95,7 @@ Use context already paid for before building new context. Top rung first:
 | Rung | When | How |
 |---|---|---|
 | 1 SendMessage | the old session is still live | message it by name; no new session |
-| 2 Resume | old session stopped, last turn < `COS_CONTINUITY_MIN` (default 50 min, cache still warm) | `spawn.sh --task-file … --resume <uuid> --resume-prompt "<text>"` |
+| 2 Resume | old session stopped, last turn < `COS_CONTINUITY_MIN` (default 50 min, cache still warm), same account | `spawn.sh --task-file … --resume <uuid> --resume-prompt "<text>"` |
 | 3 `--continues` | cold, a current session file (Resume Here) exists | `spawn.sh --task-file … --continues <old>` |
 | 4 Mine the transcript | cold, no current session file | `--continues` makes the first step a cheap-model subagent that mines the transcript into a Resume Here |
 | 5 Recall | no transcript either | search past session logs and the knowledge base; then a fresh task with what was found |
