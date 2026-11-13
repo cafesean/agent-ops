@@ -92,7 +92,7 @@ printf '{"hook_event_name":"Stop"}' | COS_WORKER=a-unpark COS_REPORT_FILE="$T/co
 [ ! -f "$T/cos/.reap-pending-a-unpark" ] && ok "hook: PARKED then WORKING schedules nothing" || bad "hook: unpark schedules"
 rm -f "$T/cos"/.reap-pending-*
 for p in $(pgrep -f "$T"); do kill "$p" 2>/dev/null; done   # the 600 s delayed runs above
-printf '{"hook_event_name":"Stop"}' | AGENT_OPS_CONFIG="$T/none.env" COS_WORKER=a-rpark COS_REPORT_FILE="$T/cos/tasks/a-rpark.md" COS_REAP_DELAY_S=600 bash "$HOOK"
+printf '{"hook_event_name":"Stop"}' | AGENT_OPS_CONFIG="$T/no-config" COS_WORKER=a-rpark COS_REPORT_FILE="$T/cos/tasks/a-rpark.md" COS_REAP_DELAY_S=600 bash "$HOOK"
 [ ! -f "$T/cos/.reap-pending-a-rpark" ] && ok "hook: no agent-ops config → inactive" || bad "hook: inactive without config"
 printf '{"hook_event_name":"Stop"}' | COS_REPORT_FILE="$T/cos/tasks/a-rpark.md" bash "$HOOK"
 [ ! -f "$T/cos/.reap-pending-a-rpark" ] && ok "hook: not a worker (no COS_WORKER) → nothing" || bad "hook: non-worker no-op"
