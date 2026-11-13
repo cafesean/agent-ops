@@ -22,12 +22,12 @@ K_WRITE = 20.0
 R_CALL = 20
 # R, g, ramp = measured medians of successor sessions; at = approved handover point
 ROLES = {
-    "lead":    dict(R=131_000, g=1_500, ramp=2_200_000, at=700_000),
-    "chief":   dict(R=147_000, g=1_100, ramp=2_500_000, at=700_000),
-    "captain": dict(R=131_000, g=1_300, ramp=2_100_000, at=700_000),
-    "multi":   dict(R=132_000, g=1_400, ramp=2_200_000, at=700_000),   # builder with several lanes (task `lanes:` >= 2)
-    "tester":  dict(R=125_000, g=1_200, ramp=2_100_000, at=700_000),
-    "builder": dict(R=132_000, g=1_400, ramp=2_200_000, at=700_000),
+    "lead":    dict(R=131_000, g=1_500, ramp=2_200_000, at=450_000),
+    "chief":   dict(R=147_000, g=1_100, ramp=2_500_000, at=450_000),
+    "captain": dict(R=131_000, g=1_300, ramp=2_100_000, at=450_000),
+    "multi":   dict(R=132_000, g=1_400, ramp=2_200_000, at=450_000),   # builder with several lanes (task `lanes:` >= 2)
+    "tester":  dict(R=125_000, g=1_200, ramp=2_100_000, at=450_000),
+    "builder": dict(R=132_000, g=1_400, ramp=2_200_000, at=450_000),
 
 }
 FLOOR = {"lead", "chief", "captain", "multi", "builder", "tester"}   # the re-measure never pulls a point below its approved `at`
