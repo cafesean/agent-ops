@@ -83,6 +83,7 @@ Not coordination: `briefs/` (newest 3), `_archive/` (read-only history), `.heart
 ## Step 0 — arm the crons (every invocation, before the mode)
 
 0. Read `$COS_DIR/STATE.md`, then `$COS_USER_DIR/rules.md` when it exists (the user's own standing rules; they win over defaults here unless a one-way-door rule says otherwise).
+0a. **Reload plugins at takeover.** A new or taking-over chief runs `/reload-plugins` in its own session first, so skills and hooks match the installed plugin versions (a session keeps the plugin code it started with). The chief cannot type a slash command through a tool: it sends the text plus Enter to its own pane (cmux: `cmux send --surface <own> '/reload-plugins'` then `cmux send-key --surface <own> Enter`; tmux: `tmux send-keys -t <own window> '/reload-plugins' Enter`), then checks the pane. After each plugin release, it does the same for every long-lived session that must pick it up (domain leads, the release owner); short workers pick it up when they next start.
 1. `CronList`. SWEEP and checkin already exist in this session → skip to the mode (idempotent).
 2. Another live chief session on this machine owns them per STATE.md → *Live crons* and its pid is alive → don't arm; say so in one line.
 3. Missing SWEEP → `CronCreate` recurring (default `7,27,47 * * * *`; offset per machine so two chiefs never write STATE.md together), prompt: `Chief-of-staff SWEEP. Load skill chief-of-staff and run SWEEP mode. Reply in the status-report format, or noop.`

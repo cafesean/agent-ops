@@ -1,5 +1,8 @@
 # Changelog
 
+## 0.8.5
+- Chief Step 0: `/reload-plugins` at takeover (sent to its own pane), and to long-lived sessions (leads, release owner) after each plugin release, so skills and hooks match the installed version.
+
 ## 0.8.4
 - Hooks: `send-lean-guard` (PreToolUse SendMessage) denies sends that wake a session for nothing: pure acknowledgements, "no reply/action needed" / "FYI only", and who-is-who broadcasts (the CHIEF / CAPTAIN files are the truth). Escape `# wake-ok: <reason>`; kill switch `COS_SEND_LEAN_GUARD=0`.
 - Worker rules and comms: send only what the receiver must act on now; short message codes (RR, LIVE, BACK, REVIEW, GO/NO, HANDOFF, TOOK, DONE, Q/A); spawn.sh names them in the worker prompt.
