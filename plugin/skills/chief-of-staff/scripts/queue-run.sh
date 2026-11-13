@@ -32,7 +32,7 @@ TPY="$HERE/lib/tasks.py"
 PFXS="$COS_PREFIX"
 needs_ok() {   # needs_ok VALUE → 0 when the task's needs are met (or no checker is configured)
   if [ -z "${COS_NEEDS_CHECK_CMD:-}" ]; then cos_skip "needs check" "COS_NEEDS_CHECK_CMD not set"; return 0; fi
-  $COS_NEEDS_CHECK_CMD "$1" >/dev/null 2>&1
+  bash -c "$COS_NEEDS_CHECK_CMD \"\$1\"" _ "$1" >/dev/null 2>&1   # a shell command line, like every *_CMD key
 }
 note() {   # note FILE REASON — record + print a refusal once per distinct reason
   local prev; prev=$(cos_python "$TPY" get "$1" queue_note)

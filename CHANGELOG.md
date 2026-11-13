@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.8.1
+- Config keys are exported when loaded, so python helpers and every python hook see them (hooks/cos-py.sh sources the config; values never printed).
+- `COS_NEEDS_CHECK_CMD` runs as a shell command line like every other `*_CMD` key, so a quoted path with spaces works.
+
 ## 0.8.0
 Chief of staff: the plugin is now the core chief only; everything specific to one setup moves to a user layer outside the plugin.
 - **User layer** (`COS_USER_DIR`, default `$COS_DIR/user`): `rules.md` (your standing rules for the chief and workers), `bin/` (your scripts), `README.md`. The chief reads `rules.md` right after STATE.md; spawn.sh tells every worker to read it in turn 1; doctor reports it; init creates the skeleton and, for several machines, recommends one synced state folder they all share (config.env stays per machine).

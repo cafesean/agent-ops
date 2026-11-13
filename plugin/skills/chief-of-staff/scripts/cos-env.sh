@@ -6,7 +6,7 @@ if [ ! -f "$COS_CONFIG" ]; then
   echo "agent-ops: no config at $COS_CONFIG — run /agent-ops:init" >&2
   return 1 2>/dev/null || exit 1
 fi
-cos_source_config "$COS_CONFIG"   # CRLF-tolerant
+set -a; cos_source_config "$COS_CONFIG"; set +a   # CRLF-tolerant; every key exported so python helpers and hooks see it
 # (COS_OS / COS_WSL / COS_PYTHON set in the config win over the detection above)
 
 # Windows paths in config (C:\x) → POSIX (/c/x on Git Bash, /mnt/c/x on WSL). Lists stay colon-separated.
