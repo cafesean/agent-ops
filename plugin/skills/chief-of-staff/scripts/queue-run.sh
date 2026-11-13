@@ -10,7 +10,13 @@
 #     → refused, stays open (add-on not configured → one skip line, not refused)
 #   - else CLAIM BY RENAME (tasks/<n>.md → tasks/.<n>.md.claim-<pid>; only one process wins), stamp
 #     status: claimed + claimed_by/claimed_at, rename back, run `spawn.sh --task-file`. spawn fails → status
-#     back to open + queue_note with the exit code (load OFFLOAD = exit 3 → retried next run).
+#     back to open + queue_note with the exit code (load OFFLOAD = exit 3 → retried next run; continuity ladder =
+#     exit 6 → stays open, the chief resumes or messages the predecessor, or adds `--fresh-ok` by hand).
+#   - `status: claimed` with no `where:` and claimed_at older than COS_CLAIM_STALE_MIN (15) min → reopened.
+#   - never claimed: a task named in $COS_DIR/CHIEF (`<prefix>: <name>` lines) or whose session is live
+#     (sessions.sh --tsv) → one stderr line, skipped.
+#   - every reopen is compare-and-set (tasks.py set-if): only while status is still claimed by THIS run, so a task
+#     set running meanwhile (spawn killed mid-way) is never flipped back to open.
 # A refusal is printed only when its reason changes (queue_note in the task), so the 20-min cron pages once.
 # stdout: one line per spawn / new refusal; nothing when nothing changed.
 set -euo pipefail
@@ -39,9 +45,34 @@ note() {   # note FILE REASON — record + print a refusal once per distinct rea
   echo "⏸ queue: $(basename "$1" .md) — $2"
 }
 n=0
+GUARD=
+guarded() {   # guarded NAME — the live chief (CHIEF `<prefix>: <name>` line) or a live session: never claim it
+  if [ -z "$GUARD" ]; then
+    GUARD=" $(sed -n 's/^[a-z][a-z]*:[[:space:]]*\([A-Za-z0-9._-][A-Za-z0-9._-]*\).*/\1/p' "$COS_DIR/CHIEF" 2>/dev/null | xargs) $("$HERE/sessions.sh" --tsv 2>/dev/null | awk -F'\t' '$1 == "live" {print $2}' | xargs) "
+  fi
+  case "$GUARD" in *" $1 "*) return 0;; esac; return 1
+}
+stale_claim() {   # stale_claim FILE — claimed > COS_CLAIM_STALE_MIN (15) min ago and never launched (no where:)
+  [ -z "$(cos_python "$TPY" get "$1" where)" ] || return 1
+  local at; at=$(cos_python "$TPY" get "$1" claimed_at)
+  cos_python - "$1" "$at" "${COS_CLAIM_STALE_MIN:-15}" <<'PYS'
+import os, sys, time
+f, at, lim = sys.argv[1], sys.argv[2], int(sys.argv[3])
+try: t = time.mktime(time.strptime(at[:16], "%Y-%m-%d %H:%M"))
+except Exception: t = os.path.getmtime(f)
+sys.exit(0 if time.time() - t > lim * 60 else 1)
+PYS
+}
 while IFS=$'\t' read -r name st to path; do
-  [ "$st" = open ] || continue
   case " $PFXS " in *" $to "*) ;; *) continue;; esac
+  case "$st" in open|claimed) ;; *) continue;; esac
+  if guarded "$name"; then echo "queue: skip $name — live chief/session (CHIEF or sessions.sh), status '$st' left as is" >&2; continue; fi
+  if [ "$st" = claimed ] && stale_claim "$path"; then
+    if [ "$DRY" = 1 ] || cos_python "$TPY" set-if "$path" --if status claimed --if where "" status open queue_detail "stale claim reopened @$(date '+%Y-%m-%d %H:%M')" 2>/dev/null; then
+      echo "↺ queue: $name — stale claim (never launched) → open"; st=open
+    fi
+  fi
+  [ "$st" = open ] || continue
   [ "$n" -lt "$MAX" ] || { echo "queue: more open tasks for $COS_PREFIX — next run" >&2; break; }
   appr=$(cos_python "$TPY" get "$path" approved)
   if [ "$appr" = false ]; then note "$path" "refused: approved: false (one-way door — the owner OKs it by setting approved: true)"; continue; fi
@@ -53,11 +84,19 @@ while IFS=$'\t' read -r name st to path; do
   cos_python "$TPY" set "$claim" status claimed claimed_by "$COS_PREFIX:$$" claimed_at "$(date '+%Y-%m-%d %H:%M')"
   mv "$claim" "$path"
   n=$((n+1))
-  if out=$("$HERE/spawn.sh" --task-file "$path" 2>&1); then
+  rc=0; out=$("$HERE/spawn.sh" --task-file "$path" 2>&1) || rc=$?
+  if [ "$rc" = 0 ]; then
     echo "▶ queue: spawned $name — $(printf '%s' "$out" | tail -1 | cut -c1-160)"
   else
-    rc=$?
-    cos_python "$TPY" set "$path" status open queue_detail "$(printf '%s' "$out" | grep -m1 -E 'refuse|fail|error' | cut -c1-160)"
-    note "$path" "spawn.sh exit $rc — back to open, retried next run$([ "$rc" = 3 ] && echo ' (load OFFLOAD)')"
+    # compare-and-set: reopen only while the claim is still ours — a task set running meanwhile stays running
+    cos_python "$TPY" set-if "$path" --if status claimed --if claimed_by "$COS_PREFIX:$$" status open \
+      queue_detail "$(printf '%s' "$out" | grep -m1 -E 'refuse|fail|error' | cut -c1-160)" 2>/dev/null \
+      || { echo "queue: $name — spawn.sh exit $rc but status is now '$(cos_python "$TPY" get "$path" status)', not our claim: left as is" >&2; continue; }
+    case "$rc" in
+      3) why=' (load OFFLOAD)';;
+      6) why=' (continuity ladder: resume or message the predecessor, or respawn with --fresh-ok)';;
+      *) why=;;
+    esac
+    note "$path" "spawn.sh exit $rc — back to open, retried next run$why"
   fi
 done < <(cos_python "$TPY" list "$COS_DIR")

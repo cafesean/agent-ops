@@ -3,6 +3,11 @@
 #   LOCAL      — room here
 #   LOCAL_LIGHT— only read-only / small work here (sonnet research, no tsc/vitest/next build)
 #   OFFLOAD    — queue new sessions (or send them to the remote runner add-on)
+# CPU gate: load1/cpu > COS_MAX_LOAD_PER_CPU (default 0.85). With COS_LOAD5_ENTER set, the gate is instead
+#   load5/cpu with hysteresis (lib/loadgate.py): OFFLOAD turns on above COS_LOAD5_ENTER (e.g. 1.2) and off only
+#   below COS_LOAD5_LEAVE (default 0.8), so one dip does not release a burst of builds. Not on Windows.
+# Heavy jobs (tsc/vitest/jest/next build) count only when they run here: a remote-run wrapper or ssh is skipped.
+# Orphans (ppid 1) are reported; COS_KILL_ORPHANS=1 kills them (TERM, then KILL).
 set -euo pipefail
 DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 . "$DIR/cos-env.sh"
@@ -35,21 +40,31 @@ PAT='tsc --noEmit|vitest|jest-worker|next build'
 heavy=0; orphans=0; orphan_mb=0
 if [ "$COS_OS" != windows ] && command -v pgrep >/dev/null 2>&1; then
   for p in $(pgrep -f "$PAT" 2>/dev/null || true); do
+    case "$(ps -o args= -p "$p" 2>/dev/null)" in *mini-run*|ssh\ *) continue;; esac   # the job runs on the remote machine
     read -r ppid rss < <(ps -o ppid=,rss= -p "$p" 2>/dev/null || echo "0 0")
     if [ "$ppid" = 1 ]; then orphans=$((orphans+1)); orphan_mb=$((orphan_mb + rss/1024)); else heavy=$((heavy+1)); fi
   done
 elif [ "$COS_OS" != windows ]; then note="note: pgrep not found — heavy build/test jobs not counted"; fi
 per_cpu=$(awk -v l="$load1" -v n="$ncpu" 'BEGIN{printf "%.2f", l/n}')
+lg_verdict= load5=
+if [ -n "${COS_LOAD5_ENTER:-}" ] && [ "$COS_OS" != windows ] && [ -f "$DIR/lib/loadgate.py" ]; then
+  export COS_LOAD5_ENTER COS_LOAD5_LEAVE="${COS_LOAD5_LEAVE:-0.8}" COS_LOAD_STATE_FILE="${COS_LOAD_STATE_FILE:-$COS_DIR/load-offload.state}"
+  read -r lg_verdict per_cpu load5 _ < <(cos_python "$DIR/lib/loadgate.py" 2>/dev/null || echo "OK $per_cpu 0 $ncpu")
+fi
 
 verdict=LOCAL; why=()
-awk -v p="$per_cpu" -v m="$COS_MAX_LOAD_PER_CPU" 'BEGIN{exit !(p>m)}' && { verdict=OFFLOAD; why+=("load/cpu $per_cpu > $COS_MAX_LOAD_PER_CPU"); }
+if [ -n "$lg_verdict" ]; then
+  [ "$lg_verdict" != OFFLOAD ] || { verdict=OFFLOAD; why+=("load5/cpu $per_cpu (on >$COS_LOAD5_ENTER, off <$COS_LOAD5_LEAVE)"); }
+else
+  awk -v p="$per_cpu" -v m="$COS_MAX_LOAD_PER_CPU" 'BEGIN{exit !(p>m)}' && { verdict=OFFLOAD; why+=("load/cpu $per_cpu > $COS_MAX_LOAD_PER_CPU"); }
+fi
 [ "${free_pct:-100}" -lt "$COS_MIN_FREE_MEM_PCT" ] && { verdict=OFFLOAD; why+=("free mem ${free_pct}% < ${COS_MIN_FREE_MEM_PCT}%"); }
 [ "$sessions" -ge "$COS_MAX_LOCAL_SESSIONS" ] && { verdict=OFFLOAD; why+=("$sessions live sessions >= $COS_MAX_LOCAL_SESSIONS"); }
 if [ "$verdict" = LOCAL ] && { [ "$heavy" -gt 0 ] || [ "${free_pct:-100}" -lt $((COS_MIN_FREE_MEM_PCT + 10)) ]; }; then
   verdict=LOCAL_LIGHT; why+=("heavy jobs=$heavy, free mem ${free_pct}%")
 fi
 echo "$verdict${why:+ — ${why[*]}}"
-echo "cpu=$ncpu load1=$load1 load/cpu=$per_cpu free_mem=${free_pct:-?}% sessions=$sessions heavy=$heavy"
+echo "cpu=$ncpu load1=$load1${load5:+ load5=$load5} load/cpu=$per_cpu free_mem=${free_pct:-?}% sessions=$sessions heavy=$heavy"
 [ -z "$note" ] || echo "$note"
 # Orphans (opt-in, COS_KILL_ORPHANS=1): they ignore SIGTERM, so TERM then KILL. Otherwise only reported.
 if [ "$orphans" -gt 0 ] && [ "${COS_KILL_ORPHANS:-0}" != 1 ]; then
