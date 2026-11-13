@@ -189,6 +189,8 @@ check `sessions.sh --tsv` (live row + pid) or the CHIEF / CAPTAIN / LEADS files.
   truth). Status and proof go to your task file Reports. One message per receiver per turn. No `me → you:` prefix:
   the receiver already sees the sender name. The send-lean-guard hook denies ack, no-action and broadcast sends;
   escape `# wake-ok: <reason>`.
+- **Short replies.** Chief and lead pane text, end-of-turn worker reports and subagent returns end at the verdict, what
+  the reader must do, and a path; at most 200 words. Detail goes to a file. Output tokens are the largest counted cost.
 - **Codes** for fixed kinds, first word of the message; plain words for anything else:
   `RR <repo> <branch>@<sha> → dev|prod · local:<proof>` release-request · `LIVE <repo> <sha> <env> · <proof>` ·
   `BACK <repo> <sha> · <why>` send-back · `REVIEW <item> · <path>` · `GO <item>` / `NO <item> · <why>` verdict ·
