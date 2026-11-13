@@ -64,6 +64,7 @@ for f in glob.glob(os.path.join(cosdir, "tasks", "*.md")):   # task files overri
         if not l.startswith(("status: DONE", "status: PARKED")): break
         ds = re.match(r"status: \S+ (\d{4}-\d\d-\d\d \d\d:\d\d)", l)
         if ds: done_since = time.mktime(time.strptime(ds.group(1), "%Y-%m-%d %H:%M"))
+    if last and last[-1].startswith("status: PARKED"): done_since = -1   # sentinel: parked, never pinged
     name = os.path.basename(f)[:-3]   # identity = file name
     rows[name] = (fm.get("where", ""), fm.get("status", ""), f, fm.get("no_ping", "").lower() == "true", done_since)
 for w, (where, st, rep, noping, done_since) in sorted(rows.items()):
@@ -77,6 +78,7 @@ for w, (where, st, rep, noping, done_since) in sorted(rows.items()):
     tm = re.match(r"tmux (\S+)", where)
     if noping: act = "skip-noping"
     elif quiet <= silent: act = "ok"
+    elif done_since == -1: act = "skip-parked"
     elif done_since is not None and now - done_since >= 3600: act = "skip-done-1h"
     elif idle > maxidle: act = "skip-idle"
     elif not m and not tm: act = "skip-nopane"
@@ -87,7 +89,7 @@ PY
 CM="${COS_CMUX_BIN:-cmux}"   # COS_CMUX_BIN: tests point it at a fake
 ping() {  # ping WS SURF — tmux window target, or cmux workspace/surface
   if [ "$1" = tmux ]; then cos_has_tmux && cos_tmux send-keys -t "$2" '⟦CK⟧' Enter
-  else command -v "$CM" >/dev/null 2>&1 && "$CM" send --workspace "$1" --surface "$2" '⟦CK⟧\r' >/dev/null 2>&1; fi
+  else command -v "$CM" >/dev/null 2>&1 && { "$CM" send --workspace "$1" --surface "$2" '⟦CK⟧\r' >/dev/null 2>&1 || "$CM" send --surface "$2" '⟦CK⟧\r' >/dev/null 2>&1; }; fi
 }
 n=0 p=0
 while IFS=$'\t' read -r act w quiet idle ws surf; do
@@ -100,6 +102,7 @@ while IFS=$'\t' read -r act w quiet idle ws surf; do
     ok) echo "ok    $w (heard ${quiet}m ago)";;
     skip-noping) echo "skip  $w — no_ping: true";;
     skip-done-1h) echo "skip  $w — DONE/PARKED >= 60 min ago: no ping, reap.sh closes it";;
+    skip-parked) echo "skip  $w — PARKED: no ping; the worker stays parked until its owner resumes it";;
     skip-idle) echo "skip  $w — idle ${idle}m > ${MAXIDLE}m: never re-message; chief decides (stop + --continues successor)";;
     *) echo "skip  $w — $act (silent ${quiet}m)";;
   esac
