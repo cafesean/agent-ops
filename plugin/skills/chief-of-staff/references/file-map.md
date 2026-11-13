@@ -32,7 +32,7 @@
 | `⟦CK⟧` protocol | `skills/chief-of-staff/protocols/ck.md` | the check-in hook, fresh on every ping |
 | Worker rulebook | `skills/chief-of-staff/references/worker-rules.md` | every worker (spawn.sh puts one pointer per section in its prompt) |
 | Scripts | `scripts/*.sh`, `asks.py`, `ctx.py`, `steering-export.py`, `reap.sh`; `scripts/lib/` (`tasks.py`, `cos-os.sh`, `lastturn.py`, `loadgate.py`, `handoff.py`) | the chief, hooks, schedulers |
-| Hooks | `plugin/hooks/`: heartbeat, check-in, heavy-cap-guard, agent-budget-guard, send-cold-guard, cold-cache-warn, worktree-owner, context-handoff-guard, ask-guard, cos-reap, agent-rule, agent-refusal-warn | Claude Code, per session |
+| Hooks | `plugin/hooks/`: heartbeat, check-in, heavy-cap-guard, agent-budget-guard, send-cold-guard, cold-cache-warn, worktree-owner, context-handoff-guard, ask-guard, destroy-guard, cos-reap, agent-rule, agent-refusal-warn | Claude Code, per session |
 | Scripts, hooks, this skill | the installed plugin (`${CLAUDE_PLUGIN_ROOT}`) | everything |
 
 ## NOT in the state dir — and why

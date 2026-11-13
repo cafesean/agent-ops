@@ -75,6 +75,9 @@ ask, and it names every route you tried.
 stores; legal text; secret rotation; design gates they asked for. Before filing any ask, re-read it: if your
 access can do it, do it instead.
 
+**Destroy is never inferred.** A delete, terminate or destroy runs only on the user's named go for that exact
+resource (SKILL.md § Critical rules; `destroy-guard` hook). Report the facts, then ask.
+
 ## Speed and heavy commands
 
 - Speed is part of done. Run independent stories in parallel lanes (subagents), up to the `load-check.sh` limit.
