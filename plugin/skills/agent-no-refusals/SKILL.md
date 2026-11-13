@@ -23,7 +23,7 @@ every agent) and in these skills, not in a knowledge base.
 ## How to apply
 
 1. Before any agent edit, name the owner role for the step. No owner named → stop and ask the lead.
-2. A check that finds a problem returns `{status, reason, options|next}`. It never stops the run.
+2. A check that finds a problem returns `{status, reason, options|next}` (the one shape: `{status, reason, options[], next, changed}`, with `code` mirroring `reason` while old role text branches on it). It never stops the run. A result that changed nothing carries `changed:false`, or the false-start guards read it as an ordinary success; a priced tool charges 0 for it.
 3. A limit or cap on what an agent may do or see is a refusal in disguise: it needs the same owner review as a refusal. Allowed: sizing by a real outside ceiling (the model's context window, a provider's documented max) recorded in a limits register, and excess that is stored and readable. Show what happens to the excess.
 4. Review the diff for refusal wording (`refused`, `rejected`, `blocked`, a reject status, a cap that stops a run). A match is a finding to fix, not a line to keep.
 5. **No hard-coded decisions (gate G7).** Code stores state, returns facts (`{status, reason, options|next}`) and runs the owner's tool calls. Code enforces only auth or tenant, and money on the end user's own confirmation. Code does NOT: post an end-user line in reaction to a situation; choose the next question from a situation; decide meaning by threshold or regex; hold, skip, drop or refuse; route an inbound by a fixed rule away from the owner; cap what the agent may see or do. Those decisions belong to the agent, using its skills. An agent-touching diff that does any of these is a finding, same as a refusal (G4).
