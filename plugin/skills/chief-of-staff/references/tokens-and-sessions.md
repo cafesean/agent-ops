@@ -4,6 +4,7 @@
 Cost ≈ API calls × context size. Count cost as cache writes x1.25 + input + output x5; warm cache reads are not counted. On that measure the levers are
 output length (reports, subagent returns), cold starts (new sessions and subagents, resumes after the cache expired) and
 model choice. Context size is not a lever: a lower handover point saves about nothing, because a handover writes a fresh cache.
+- **A cold resume costs about 1.25 x the old context in cache writes; a fresh successor costs about 115k.** A session idle past the cache lifetime with context above ~100k is never resumed: start a successor (`--continues`). Below ~100k a resume is equal or cheaper.
 - **Resume within the cache lifetime (about 1 h) is warm.** The cache is server-side, keyed on the prompt prefix, so it survives a killed process. Past that the whole context is rewritten.
 - **A mid-session MCP/tool load rewrites the whole cache.** Load heavy tools at session start or inside a subagent.
 - **Build subagents tend to dominate spend**, not cache misses. Cap subagent context: a fresh subagent per story, handoff via files.
