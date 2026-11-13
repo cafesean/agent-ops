@@ -1,5 +1,5 @@
 {
-  "description": "mini-run-guard (remote runner add-on; inactive unless configured): denies heavy Bash commands (tsc, builds, full test suites) under the configured scope root and names the exact `mini-run <cmd>` to use. Escape: COS_ALLOW_LOCAL_HEAVY=1 or `# local-ok: <reason>`. cos-heartbeat: chief-spawned workers (env COS_WORKER) touch $COS_HEARTBEAT_DIR/<worker> on every tool call / turn end (zero tokens). cos-ck: the exact prompt ⟦CK⟧ in a worker injects the check-in protocol (protocols/ck.md).",
+  "description": "mini-run-guard (remote runner add-on; inactive unless configured): denies heavy Bash commands (tsc, builds, full test suites) under the configured scope root and names the exact `mini-run <cmd>` to use. Escape: COS_ALLOW_LOCAL_HEAVY=1 or `# local-ok: <reason>`. cos-heartbeat: chief-spawned workers (env COS_WORKER) touch $COS_HEARTBEAT_DIR/<worker> on every tool call / turn end (zero tokens). cos-ck: the exact prompt ⟦CK⟧ in a worker injects the check-in protocol (protocols/ck.md). Every chief-of-staff guard below is inactive (exit 0, no output) unless the agent-ops config exists; python hooks run through hooks/cos-py.sh (config check + cos_python). heavy-cap-guard: denies a heavy local Bash job (tsc/vitest/jest/next build/pm test|typecheck|build/turbo) when >= COS_MAX_HEAVY_LOCAL (2) already run here; mini-run passes; escape `# heavy-ok: <reason>`. agent-budget-guard: denies Agent/Task spawns while the load5 hysteresis gate (scripts/lib/loadgate.py) is OFFLOAD or >= COS_MAX_LIVE_SUBAGENTS (8) live subagents run; escape COS_ALLOW_SUBAGENT=1. send-cold-guard: denies SendMessage to a local session whose last turn is >= COS_SEND_COLD_MIN (50) min old or whose task is stopped/parked/done and not provably warm; escape `# cold-ok: <reason>`. ask-guard: denies a new ask in $COS_DIR/tasks/*.md without a check:/evidence: line, or whose what: line is a login/config step without a hard gate; escape `user-only: <what you tried>`; kill switch COS_ASK_GUARD=0. worktree-owner (workers only): stamps every worktree a worker creates with its owner for stop.sh's worktree gate; kill switch COS_WORKTREE_OWNER=0. cos-reap (workers only, Stop): schedules one detached reap.sh --only NAME when the task reports DONE or is parked; kill switch COS_REAP=0. context-handoff-guard (Stop): blocks the stop once at the session's handover point (lib/handoff.py, cap COS_CONTEXT_HANDOFF_TOKENS) with the handover steps. cold-cache-warn (UserPromptSubmit): shows the user a systemMessage when the last real model reply is >= COS_WG_COLD_MIN (60) min old; kill switch COS_COLD_WARN=0. All fail open.",
   "hooks": {
     "PreToolUse": [
       {
@@ -21,6 +21,46 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/heavy-cap-guard.sh\"",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Agent|Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/cos-py.sh\" agent-budget-guard.py",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "SendMessage",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/cos-py.sh\" send-cold-guard.py",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "matcher": "Write|Edit|MultiEdit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/cos-py.sh\" ask-guard.py",
+            "timeout": 5
+          }
+        ]
       }
     ],
     "PostToolUse": [
@@ -32,6 +72,16 @@
             "timeout": 5
           }
         ]
+      },
+      {
+        "matcher": "Bash|EnterWorktree",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/cos-py.sh\" worktree-owner.py",
+            "timeout": 10
+          }
+        ]
       }
     ],
     "Stop": [
@@ -41,6 +91,16 @@
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/cos-heartbeat.sh\"",
             "timeout": 5
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/cos-reap.sh\"",
+            "timeout": 10
+          },
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/cos-py.sh\" context-handoff-guard.py",
+            "timeout": 10
           }
         ]
       }
@@ -56,6 +116,15 @@
           {
             "type": "command",
             "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/agent-rule.sh\"",
+            "timeout": 5
+          }
+        ]
+      },
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "bash \"${CLAUDE_PLUGIN_ROOT}/hooks/cos-py.sh\" cold-cache-warn.py",
             "timeout": 5
           }
         ]
