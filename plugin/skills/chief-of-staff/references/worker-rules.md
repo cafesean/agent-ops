@@ -253,6 +253,12 @@ A lead that hands over while subagents run stays up as a relay until they report
 its successor and task file, starts no new work and reloads no big files. It writes `subagents: 0 running` when none
 are left, then stops. The successor does not re-dispatch those subagents.
 
+**Hand over at the handover point, never before.** A session works until `ctx.py` shows it at its `at` (task
+`handoff_at`) or the context-handoff guard blocks its stop. Between 90% of `at` and `at` it keeps its Resume Here
+current and carries on. It never asks for a successor and never writes HANDOFF early. Heavy remaining work goes to
+subagents, which do not grow the parent's context. No successor is spawned below `at`, including at a WARN. The only
+exceptions are an account handover or cut-off, and the owner's word.
+
 **Watchers and leads with a Monitor or session crons hand over the same way.** (1) At the handover point: Resume
 Here, then ask the chief for a successor. Never `spawn.sh --task-file` your own running task (it refuses). The chief
 writes `tasks/<line>-<N+1>.md` and spawns it `--continues <old> --fresh-ok` (`--light` for read-only watchers).
