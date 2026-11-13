@@ -12,7 +12,9 @@
 #   next.sh --no-queue     skip queue-run.sh (default: run it first, so queued tasks spawn every 20 min)
 # Order of one run: queue-run.sh → reap.sh (stop.sh DONE|PARKED for live workers that report it, every gate, never
 #   --force; --alert prints only NEW refusals; off: COS_REAP=0) → asks.py sweep (close asks of closed/superseded tasks,
-#   run each ask's `check:`, so "Needs you" shows only asks still true; off: COS_ASK_SWEEP=0) → plan.
+#   run each ask's `check:`, so "Needs you" shows only asks still true; off: COS_ASK_SWEEP=0) → COS_NEXT_HOOK_CMD
+#   (optional user command, e.g. in $COS_USER_DIR/bin; gets --alert when this run has it; its stdout is ignored,
+#   a failure never stops the run) → plan.
 # Tasks: tasks/<name>.md frontmatter is read exactly like a mission file (a task overrides a same-name
 #   mission); its `## Reports` lines are its inbox; its status/where replace the LEDGER row. Open tasks
 #   addressed to this machine show as "Queue". The run stamps `- <prefix> next.sh: …` under STATE.md → Last verified.
@@ -46,6 +48,10 @@ mkdir -p "$COS_DIR/missions"
 [ "${COS_REAP:-1}" = 0 ] || [ ! -x "$HERE/reap.sh" ] || "$HERE/reap.sh" $([ "$ALERT" = 1 ] && echo --alert) 2>/dev/null || true
 # Asks freshness: close asks of closed/superseded tasks + run each ask's `check:` before planning. Off: COS_ASK_SWEEP=0.
 [ "${COS_ASK_SWEEP:-1}" = 0 ] || [ ! -f "$HERE/asks.py" ] || cos_python "$HERE/asks.py" sweep >/dev/null 2>&1 || true
+# User hook: one optional command from the user layer per run (extra sweeps the plugin does not know about).
+if [ -n "${COS_NEXT_HOOK_CMD:-}" ]; then
+  bash -c "$COS_NEXT_HOOK_CMD $([ "$ALERT" = 1 ] && echo --alert)" >/dev/null 2>&1 || true
+fi
 touch "$COS_DIR/_heartbeat.$COS_PREFIX" 2>/dev/null || true   # dead-man stamp of this machine
 SESS=$("$HERE/sessions.sh" --tsv 2>/dev/null || true)
 export COS_LIB="$HERE/lib"

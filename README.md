@@ -51,12 +51,12 @@ Session files go to `.agent-ops.json` `sessionsDir` → `COS_SESSIONS_DIR` → a
 | Core (Claude Code + git only) | Add-ons (opt-in during init, off by default) |
 |---|---|
 | task files, spawn / queue / collect / stop | cmux panes (`COS_LAUNCHER=cmux`) |
-| GOALS.md, STATE.md, Outstanding.md | Telegram alerts via Hermes |
+| GOALS.md, STATE.md, Outstanding.md | push alerts to your phone/chat via your own command (`COS_NOTIFY_CMD`) |
 | BRIEF and SWEEP | Jira items in Outstanding |
-| tmux or wt launcher (print = manual fallback) | remote job runner for heavy commands |
-| `doctor.sh` health check | multiple Claude accounts, load-balanced |
+| tmux or wt launcher (print = manual fallback) | your own rules and scripts in the user layer (`$COS_DIR/user`, outside the plugin) |
+| `doctor.sh` health check | several machines sharing one synced state folder |
 | session-start / update / end, from-transcript, recap, analysis | ADHD / focus mode |
-| plugin-authoring, agent-updater, version-bump | key proxy (macOS only): agents use API keys, never read them (`COS_VAULT_PORT`) |
+| plugin-authoring, agent-updater, version-bump | |
 
 An add-on with no config prints `addon <name> not configured, skipping` and exits cleanly. Core never needs an add-on.
 
@@ -110,7 +110,7 @@ sudo apt update && sudo apt install -y git tmux python3 jq
 - Launcher: `COS_LAUNCHER=wt` opens each worker in a Windows Terminal tab (`wt.exe -w 0 new-tab`); `stop.sh` ends the worker but the tab stays open. `print` is the manual fallback: you paste each command yourself.
 - Keep LF line ends (`git config core.autocrlf false` before cloning); a CRLF-edited `config.env` is tolerated.
 
-Known limits: no cmux (macOS only); `load-check.sh` is approximate on Git Bash (no load/memory figures, verdict LOCAL with a `note:`); the multi-account add-on needs the macOS Keychain (prints `addon accounts: macOS only, skipping` elsewhere); nothing here has been run on a real Windows machine yet.
+Known limits: no cmux (macOS only); `load-check.sh` is approximate on Git Bash (no load/memory figures, verdict LOCAL with a `note:`); nothing here has been run on a real Windows machine yet.
 
 ## FAQ
 **Does it work without cmux?** Yes. Use `tmux` (mac, Linux, WSL) or `wt` (Windows Terminal) and workers still start by themselves. Without any of them only `print` is left: it prints each `claude` command and you paste it into a terminal yourself, so the chief and the queue cannot start workers on their own. See *Do I need tmux?*
