@@ -318,6 +318,9 @@ first `status: WORKING` line carries `steering: N items, M open`.
 A Bash call that a hook blocks runs nothing. Re-run the parts that were not blocked; ask about the block once
 (SKILL.md → *Critical rules*). A git pathspec that contains `[` needs the `:(literal)` prefix.
 
+- Stay in the launch dir. A bare `cd <subdir>` carries to the next Bash call and moves the session's working dir. Use
+  `git -C <dir>`, absolute paths, or a subshell `(cd <dir> && …)`; a session that finds itself moved runs
+  `cd <launch dir>` at once.
 - zsh does not word-split `$VAR`: use an array (`H=(a b c); for h in $H`). A command held in a variable is an array
   (`cmd=(tool sub …)`, run `"${cmd[@]}"`), never a string.
 - zsh expands a word that starts with `=` as a command path: `echo ======` fails and stops a `;` chain. Quote it
