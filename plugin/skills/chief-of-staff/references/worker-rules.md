@@ -8,7 +8,7 @@ prompt itself: `worker-prompt-examples.md` (`COS_WORKER_PROMPT_EXTRA`).
 - [Roles](#roles)
 - [Asks and the NEEDS YOU banner](#asks-and-the-needs-you-banner)
 - [Autonomy — do it, don't ask](#autonomy--do-it-dont-ask)
-- [Speed and the remote machine](#speed-and-the-remote-machine)
+- [Speed and heavy commands](#speed-and-heavy-commands)
 - [No overdoing](#no-overdoing)
 - [Test tiers](#test-tiers)
 - [Subagents](#subagents)
@@ -31,8 +31,8 @@ spawn.sh picks the role, so each worker's prompt carries only the pointers that 
 | Role | Picked when | Gets |
 |---|---|---|
 | chief | name is the `$COS_DIR/CHIEF` file's name or matches `*-chief*` | every section except Release, Limits, Test tiers |
-| builder | launch dir is under one of `COS_CODE_DIRS` (default `COS_MONOREPO`), or the session is the release owner | every section |
-| non-dev | anything else (notes, finance, research) | every section except Release, Limits, Test tiers, remote machine |
+| builder | launch dir is under one of `COS_BUILDER_DIRS` (empty = every dir), or the session is the release owner | every section |
+| non-dev | anything else (notes, finance, research) | every section except Release, Limits, Test tiers |
 
 ## Asks and the NEEDS YOU banner
 
@@ -75,27 +75,25 @@ ask, and it names every route you tried.
 stores; legal text; secret rotation; design gates they asked for. Before filing any ask, re-read it: if your
 access can do it, do it instead.
 
-## Speed and the remote machine
+## Speed and heavy commands
 
 - Speed is part of done. Run independent stories in parallel lanes (subagents), up to the `load-check.sh` limit.
   Batch independent tool calls.
-- At most one remote job queued or running per session; batch branches into one run. The remote queue is fair
-  per worker: a second job from a worker that already holds a slot waits while another worker waits.
 - **Independent work never waits on other work.** Build every repo of a change at once (deploy order still
   applies); the builder runs its own dev proof; type-check gates run side by side in separate worktrees; a release
   request goes out per item as each is green.
-- Heavy commands (full suites, big type-checks, production builds) run on the remote machine via `mini-run` when the
-  remote runner add-on is on (`addons/hardware.md`). This machine at OFFLOAD, or a guard blocking a lane → move
-  the heavy part there, don't wait. Keep local only what needs this machine: dev servers, local DB, tunnels,
-  browser, `.env`. Never report the remote machine down from memory: `mini-run` re-checks it first.
+- Heavy commands (full suites, big type-checks, production builds) may be routed to another machine by a
+  user-layer script; see your user rules (`$COS_USER_DIR/rules.md`). This machine at OFFLOAD, or the heavy-cap
+  guard blocking a lane → use that route if your user rules name one, else wait for a slot. Keep local only what needs this machine: dev servers, local DB, tunnels,
+  browser, `.env`.
 - Foreground Bash that can pass 2 min: a long `timeout` or `run_in_background`. A long script runs under
   `nohup … > log 2>&1 &`, watched with a Monitor.
 - Post a status line in the task file at least every 30 min: what finished, what runs next.
 
 ## No overdoing
 
-1. Before any new spec, build or test step, check it is not already done: `shipped.yaml` (+ `where-it-is.sh`)
-   when ship tracking is on, the issue tracker, git log, session files. A cheap subagent that reports in ≤ 5 lines.
+1. Before any new spec, build or test step, check it is not already done: any ship-tracking script your user
+   rules name, the issue tracker, git log, session files. A cheap subagent that reports in ≤ 5 lines.
 2. Green stays green: re-run tests only if `git diff <last-green-hash>..HEAD` touches that code. Record the green
    hash in your report.
 3. One right-sized proof per change. Exhaustive test matrices only for security or tenant-isolation stories.
@@ -111,7 +109,7 @@ access can do it, do it instead.
 |---|---|---|
 | 1 quick check (DEFAULT) | every change | ONE proof for this change, run locally: one targeted test file or one real call/screen on your own local stack; type-check only the touched package. Never deploy to dev to try a change |
 | 2 smoke | only when calling a deploy done | health check + touched pages + ONE happy path |
-| 3 full regression (remote machine when available) | shared SDK/core, auth/permissions/tenant isolation, money, table-altering migrations, a prod release cut (once per cut), a bug that already regressed | full suite |
+| 3 full regression (another machine when your user rules name one) | shared SDK/core, auth/permissions/tenant isolation, money, table-altering migrations, a prod release cut (once per cut), a bug that already regressed | full suite |
 
 Unsure → Tier 1, and say so. Subagents follow the same tiers. A release request also needs the full-repo
 type-check against the base error list (0 new): a check filtered to changed files misses a duplicate declaration
@@ -250,7 +248,7 @@ It reads its predecessor's Resume Here and task file Reports first, reconciles w
 and posts one status line. Then it prints a short HISTORY recap for the pane (max 15 lines: what the predecessors
 did, where it is now with hashes, open asks, existing designs for the job), because the successor has no
 scrollback. Before it reports a predecessor's fix as live, it checks the CONTENT on the prod commit
-(`git show <sha>:<file> | grep <line>`, or `lib/prodcontent.py`), never merge-base ancestry: a hold-out cut drops
+(`git show <sha>:<file> | grep <line>`), never merge-base ancestry: a hold-out cut drops
 the content while ancestry still holds. If the predecessor is still live, it asks the predecessor for its Resume
 Here first. A live predecessor's transcript is never mined; a cold one without Resume Here is mined by a cheap
 subagent (continuity ladder rung 4, SKILL.md).
@@ -291,8 +289,7 @@ Only when the whole task is finished (you report DONE, or the user signs off or 
    `teardown: N worktrees removed, M kept (why)` — stop.sh refuses DONE without it. stop.sh also checks git: every
    worktree you created (stamped by the worktree-owner hook) must be removed or locked with a reason
    (`git worktree lock --reason "<why> (owner <you>)"`) before DONE, STOPPED, PARKED or HANDOFF, or it refuses (exit 9).
-2. **Shipped.** Ship tracking on and code moved → append your item to `shipped.yaml` (id, title, tracker key,
-   worker, date, repos with commits) and put `shipped: <id>` in the DONE line, or stop.sh refuses.
+2. **Shipped.** Your user rules name a ship-tracking step → do it before DONE.
 3. **Session + references.** `/agent-ops:session-update` (session file path in the report), then update the
    references: every rule, trap, correction or how-to learned goes to the skill or doc that owns it (or one
    proposal file, if the user runs a proposal gate). Report `refs: proposed <N> (<files>)` or `refs: none (why)`.

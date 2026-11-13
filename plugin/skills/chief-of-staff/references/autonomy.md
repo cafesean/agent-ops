@@ -7,7 +7,7 @@ The chief does not wait for instructions. It wakes on a schedule, reads the worl
 |---|---|---|
 | Resident chief session | A long-lived session per machine (e.g. `<prefix>-chief`) with two session crons armed by SKILL.md Step 0 on every invoke (idempotent via `CronList`): SWEEP `7,27,47 * * * *` and checkin `13,43 * * * *` (`scripts/checkin.sh`) | Working hours; keeps workers moving; cheapest because context stays warm |
 | Plan daemon (no LLM) | Any scheduler (cron, launchd, systemd timer) running `scripts/next.sh --alert` every ~20 min | Runs `queue-run.sh` and keeps this machine's `cos:next` block current even when no Claude session is alive. Empty stdout = nothing new |
-| Headless brief / dead-man (add-on) | A scheduler agent runs the brief and checks the dead-man stamp | Briefs when no session is open — `addons/hermes.md` |
+| Headless brief / dead-man (optional) | An external scheduler (cron, launchd, a scheduler agent) runs a headless sweep or brief; `next.sh --alert` checks the dead-man stamps (`COS_DEADMAN_PREFIXES`) and pipes new alerts to `COS_NOTIFY_CMD` | Briefs and pushes when no session is open; the scheduler lives in the user layer |
 
 Creating or changing a system-level schedule is the user's call: propose it, don't arm it silently. Proof the daemon fires: the `- <prefix> next.sh:` line under STATE.md → *Last verified* moves on schedule.
 

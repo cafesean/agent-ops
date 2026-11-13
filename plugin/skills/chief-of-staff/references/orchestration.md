@@ -14,7 +14,6 @@ Script paths: `$S` = `${CLAUDE_PLUGIN_ROOT}/skills/chief-of-staff/scripts`.
 - [Asks — the Needs-you lane](#asks--the-needs-you-lane)
 - [DEPLOY-LOCK](#deploy-lock)
 - [Prod release = switches ON](#prod-release--switches-on)
-- [Ship tracking (add-on)](#ship-tracking-add-on)
 - [Goal gate](#goal-gate)
 - [Charter template](#charter-template)
 - [Rules](#rules)
@@ -79,7 +78,7 @@ spawn.sh gates: `task goal:` missing or parent missing/unknown/parked → exit 2
 3. **Run** → the worker appends a report at each milestone and at the end.
 4. **Collect** → `collect.sh` every sweep. Report values: `STARTED`, `WORKING`, `BLOCKED`, `DONE`, `FAILED`.
 5. **Verify** → on DONE, check the artifact (commit hash, test output, file). Unverified DONE stays running.
-6. **Close** → `stop.sh <name> DONE|FAILED|STOPPED [--force] [--dry-run]`. Refuses: no `session:` since STARTED (exit 4); an open ask unless `parked` (exit 5); a foreign prefix (exit 6); DONE without `session:` + `teardown:` — plus `refs:` when `COS_REQUIRE_REFS=1`, `shipped:` when ship tracking (`COS_SHIPPED`) is on and code moved, `jira:` when Jira is configured (exit 7). Kills only its own pid and pane, never the chief or the user's sessions.
+6. **Close** → `stop.sh <name> DONE|FAILED|STOPPED [--force] [--dry-run]`. Refuses: no `session:` since STARTED (exit 4); an open ask unless `parked` (exit 5); a foreign prefix (exit 6); DONE without `session:` + `teardown:` — plus `refs:` when `COS_REQUIRE_REFS=1`, `jira:` when Jira is configured (exit 7). Kills only its own pid and pane, never the chief or the user's sessions.
    - Also refuses: the user typed in the session within `COS_REAP_IDLE_MIN` (exit 8, `--force` only when they said it is finished); a worktree the worker made (stamped by the worktree-owner hook) is neither removed nor locked with a reason (exit 9, on DONE / STOPPED / PARKED / HANDOFF); HANDOFF without `refs:` or with a Monitor still running (exit 7).
    - **Never just kill a worker**: its subagents may be running. Stop one unasked only when it is CLEARLY done. When the user stops a session, it is stopped for good: `stop.sh` the same turn.
    - **Auto-close (`COS_REAP=1`)**: `reap.sh` (and the cos-reap SessionEnd/Stop hook, after `COS_REAP_DELAY_S`) stops DONE, parked or dead workers idle ≥ `COS_REAP_IDLE_MIN` (default 60) through `stop.sh`, so every gate still runs. It never reaps a session the user typed in within that window, a domain lead in `$COS_DIR/LEADS`, or the chief.
@@ -168,9 +167,6 @@ A release that merges code but leaves its switches off is NOT done.
 - Money, messages to real customers, and another team's live systems wait for the user's separate word.
 - **Chief:** reject a prod-release DONE without the switch table; send it back.
 
-## Ship tracking (add-on)
-When enabled, workers append each shipped item to `$COS_SHIPPED` (`shipped.yaml`: id, plain-words title, ticket, worker, date, repos → branch + work commits) and report `shipped: <id>` on DONE. `scripts/addons/where-it-is.sh` reads it and reports each item as local / pushed / dev / prod from live git, gaps first, with a checked time; `scripts/addons/release-gap.sh` lists, per repo in `$COS_RELEASE_REPOS`, what is on the dev branch but not on prod. Answer "where is X" and "what's left to release" from these, never from STATE.md or a worker's say-so.
-
 ## Goal gate
 - Every task gets its OWN task goal; the broad GOALS.md goal is its parent.
 - `task goal:` = one sentence, an outcome not an activity, in the user's words where they gave them. `done means:` = the concrete check. `parent goal:` = an ID with a `### <ID> · ` heading in GOALS.md.
@@ -216,7 +212,6 @@ Append under `## Reports` of this file. Plain text in your pane never reaches th
     - session: <session file path>          (required on DONE)
     - teardown: <N removed, M kept (why)>   (required on DONE)
     - refs: <docs updated, or none>         (required on DONE when COS_REQUIRE_REFS=1)
-    - shipped: <id>                         (required on DONE when ship tracking is on and code moved)
 Report at every milestone and at the end.
 ```
 

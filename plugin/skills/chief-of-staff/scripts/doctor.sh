@@ -120,10 +120,17 @@ case "${COS_SESSIONS_DIR:-}" in
   *) row PASS "COS_SESSIONS_DIR" "$COS_SESSIONS_DIR (relative to each repo root)";;
 esac
 
+# ---- user layer (the user's own rules + scripts, outside the plugin) ----
+if [ -d "$COS_USER_DIR" ]; then
+  [ -f "$COS_USER_DIR/rules.md" ] && row PASS "user layer" "$COS_USER_DIR (rules.md present)" \
+    || row WARN "user layer" "$COS_USER_DIR has no rules.md — workers get no user rules line"
+  [ -d "$COS_USER_DIR/bin" ] && row PASS "user bin" "$(ls "$COS_USER_DIR/bin" 2>/dev/null | wc -l | tr -d ' ') file(s)" || row WARN "user bin" "missing — /agent-ops:init creates it"
+else row WARN "user layer" "$COS_USER_DIR missing — run /agent-ops:init to create the skeleton"; fi
+
 # ---- add-ons (only when configured) ----
-if [ -n "${COS_TELEGRAM_TARGET:-}" ]; then
-  need_bin hermes FAIL "Telegram add-on needs hermes"
-else row PASS "addon telegram" "off"; fi
+if [ -n "${COS_NOTIFY_CMD:-}" ]; then
+  need_bin "${COS_NOTIFY_CMD%% *}" WARN "COS_NOTIFY_CMD first word not on PATH — next.sh --alert pushes nothing"
+else row PASS "notify" "off (COS_NOTIFY_CMD unset — alerts print only)"; fi
 
 if [ -n "${COS_JIRA_BASE:-}" ]; then
   case "$COS_JIRA_BASE" in https://*) row PASS "addon jira" "base set";; *) row WARN "addon jira" "COS_JIRA_BASE should start https://";; esac
@@ -140,15 +147,6 @@ if [ -n "${COS_REMOTE_HOST_KEY:-}" ]; then
 else row PASS "addon remote runner" "off"; fi
 
 [ -z "${COS_SPAWN_ENV_CMD:-}" ] || { set -- ${COS_SPAWN_ENV_CMD}; command -v "$1" >/dev/null 2>&1 && row PASS "spawn env command" "set (output never shown)" || row WARN "spawn env command" "COS_SPAWN_ENV_CMD not runnable: $1"; }
-if [ -n "${COS_VAULT_PORT:-}" ]; then   # loopback-only check; the proxy returns route names, never secrets
-  case "$COS_VAULT_PORT" in *[!0-9]*) row FAIL "addon keyproxy" "COS_VAULT_PORT must be a port number";;
-  *) kp=$(bash "$HERE/addons/keyproxy/keyproxy-health" "$COS_VAULT_PORT" 2>/dev/null)
-     if [ $? -eq 0 ]; then row PASS "addon keyproxy" "${kp#keyproxy: }"
-     else
-       hint="start your vault"; [ "$(uname -s)" = Darwin ] && hint="install the bundled proxy: sudo bash $HERE/addons/keyproxy/install.sh"
-       row WARN "addon keyproxy" "nothing healthy on 127.0.0.1:$COS_VAULT_PORT — needs: [vault] tasks wait; $hint"; fi;;
-  esac
-else row PASS "addon keyproxy" "off"; fi
 
 [ "${COS_ADHD_MODE:-0}" = 1 ] && row PASS "addon adhd mode" "on" || row PASS "addon adhd mode" "off"
 

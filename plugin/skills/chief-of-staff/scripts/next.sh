@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # The plan daemon. Reads this machine's task files (and legacy mission files) and says, per worker, what is
 # happening now, what comes next and what blocks it — so the plan survives any Claude session dying. Runs
-# from a scheduler (cron / launchd / Hermes add-on) every 20 min, and from the chief SWEEP; the chief reads
+# from an external scheduler (cron, launchd, a scheduler agent) every 20 min, and from the chief SWEEP; the chief reads
 # this machine's block in Outstanding.md instead of scroll-back.
 #   next.sh                write this machine's Outstanding.md block + STATE.md "next.sh" line; print a summary
 #   next.sh --alert        scheduled mode: print ONLY missions that newly flipped to blocked/died
 #                          (deduped via $COS_DIR/.next-alert-state.json); empty stdout = nothing new.
-#                          With the optional Hermes add-on, stdout goes to chat (e.g. Telegram).
+#                          COS_NOTIFY_CMD set (optional) → the same text also goes to that command on stdin
+#                          (a push to the user's phone/chat); unset = no push, stdout only.
 #   next.sh --src NAME     label the daemon.log line (default: manual)
 #   next.sh --no-queue     skip queue-run.sh (default: run it first, so queued tasks spawn every 20 min)
 # Order of one run: queue-run.sh → reap.sh (stop.sh DONE|PARKED for live workers that report it, every gate, never
@@ -446,7 +447,13 @@ if os.path.exists(sp_):
             S.insert(j, line)
         else: S[i] = line
         write(sp_, "\n".join(S))
-if alert: print("\n".join(out))
+if alert:
+    print("\n".join(out))
+    ncmd = os.environ.get("COS_NOTIFY_CMD", "").strip()
+    if out and ncmd:   # optional push: the message text on stdin; a failing notifier never fails the run
+        import subprocess
+        try: subprocess.run(ncmd, shell=True, input="\n".join(out), text=True, timeout=60, stdout=subprocess.DEVNULL)
+        except Exception as e: print(f"notify: COS_NOTIFY_CMD failed ({type(e).__name__})", file=sys.stderr)
 else: print(summary + f" → {op or os.path.join(cosdir, 'NEXT.md')}")
 if broken: print("; ".join(broken), file=sys.stderr); sys.exit(1)
 PY

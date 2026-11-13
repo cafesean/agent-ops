@@ -18,7 +18,7 @@
 | Dead-man stamp | `$COS_DIR/_heartbeat` | every chief SWEEP (`touch`) | any dead-man check |
 | Worker heartbeats | `$COS_DIR/.heartbeat/<worker>` | heartbeat hook | `checkin.sh` (per machine) |
 | Alert dedupe | `$COS_DIR/.next-alert-state.json` | `next.sh --alert` | `next.sh --alert` (per machine) |
-| Shipped items (add-on) | `$COS_SHIPPED` (`shipped.yaml`) | worker on DONE when code moved; chief fills a gap | `where-it-is.sh`, `outstanding.sh` |
+| User layer | `$COS_USER_DIR` (default `$COS_DIR/user`): `rules.md`, `bin/`, `README.md` | the user (init makes the skeleton); the chief adds a standing rule to `rules.md` the same turn | the chief after STATE.md; every worker in turn 1 (spawn.sh line); config keys that point at `bin/` scripts |
 | Chief name | `$COS_DIR/CHIEF` | the chief at Step 0 / takeover | workers before messaging the chief; spawn.sh role pick |
 | Release owner name (optional) | `$COS_DIR/CAPTAIN` | the release owner session | builders sending release requests |
 | Domain leads (optional) | `$COS_DIR/LEADS`, `teams/<domain>.md` | the chief; each lead its roster | workers, `reap.sh` (leads are never reaped) |
@@ -31,14 +31,14 @@
 |---|---|---|
 | `⟦CK⟧` protocol | `skills/chief-of-staff/protocols/ck.md` | the check-in hook, fresh on every ping |
 | Worker rulebook | `skills/chief-of-staff/references/worker-rules.md` | every worker (spawn.sh puts one pointer per section in its prompt) |
-| Scripts | `scripts/*.sh`, `asks.py`, `ctx.py`, `steering-export.py`, `reap.sh`; `scripts/lib/` (`tasks.py`, `cos-os.sh`, `lastturn.py`, `loadgate.py`, `handoff.py`, `prodcontent.py`); `scripts/addons/` (`mini-run.sh`, `where-it-is.sh`, `release-gap.sh`, `local-tmux.sh`, `wake-guard.sh`, …) | the chief, hooks, schedulers |
-| Hooks | `plugin/hooks/`: heartbeat, check-in, heavy-cap-guard, agent-budget-guard, send-cold-guard, cold-cache-warn, worktree-owner, context-handoff-guard, ask-guard, cos-reap, mini-run-guard | Claude Code, per session |
+| Scripts | `scripts/*.sh`, `asks.py`, `ctx.py`, `steering-export.py`, `reap.sh`; `scripts/lib/` (`tasks.py`, `cos-os.sh`, `lastturn.py`, `loadgate.py`, `handoff.py`) | the chief, hooks, schedulers |
+| Hooks | `plugin/hooks/`: heartbeat, check-in, heavy-cap-guard, agent-budget-guard, send-cold-guard, cold-cache-warn, worktree-owner, context-handoff-guard, ask-guard, cos-reap, agent-rule, agent-refusal-warn | Claude Code, per session |
 | Scripts, hooks, this skill | the installed plugin (`${CLAUDE_PLUGIN_ROOT}`) | everything |
 
 ## NOT in the state dir — and why
 | What | Where | Why outside |
 |---|---|---|
-| Local config | `${AGENT_OPS_CONFIG:-$HOME/.claude/agent-ops/config.env}` | Paths and prefix differ per machine; may hold notifier targets. Never synced, never in git |
+| Local config | `${AGENT_OPS_CONFIG:-$HOME/.claude/agent-ops/config.env}` | Paths and prefix differ per machine; may name notifier commands. Never synced, never in git. State and the user layer may sit in ONE synced folder all machines share |
 | Worker launch scripts | written by spawn.sh under the local config dir | Per machine; kept out of shared folders |
-| Secrets | your secret store or vault add-on (`addons/secrets.md`) | Secrets never sit in a folder agents read freely |
+| Secrets | your secret store (a user-layer script may front it) | Secrets never sit in a folder agents read freely |
 | Transcripts | `~/.claude/projects/<slug>/*.jsonl` | Machine-local by design; why a session file comes first for a successor |

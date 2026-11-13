@@ -46,7 +46,8 @@
 # Role: task `role:` (chief|builder|non-dev) wins; else chief when NAME is the CHIEF file's name for this machine or
 #   ends -chief; builder when --dir is under one of $COS_BUILDER_DIRS (colon list; empty = every dir); else non-dev.
 #   The first prompt carries one pointer line per section of references/worker-rules.md that applies to the role.
-# Prompt extension: $COS_WORKER_PROMPT_EXTRA is added to every first prompt (the user's own standing rules).
+# Prompt extension: $COS_WORKER_PROMPT_EXTRA is added to every first prompt (the user's own standing rules), and when
+#   $COS_USER_DIR/rules.md exists one line "User rules: read <path> in turn 1" (the user layer, outside the plugin).
 # Env extension: $COS_SPAWN_ENV_CMD (optional, local workers) — a command the launch script runs at launch with
 #   the task file path and the worker name as arguments; each stdout line `KEY=VALUE` (KEY matching
 #   ^[A-Z_][A-Z0-9_]*$) is exported into the worker's environment. Other lines are ignored; values are never
@@ -90,7 +91,7 @@ if [ -n "$TASKF" ]; then
   [ -n "$AGENT" ] || AGENT=$(tget agent)
   [ -n "$STORYLIST" ] || STORYLIST=$(tget story_list)
   [ -n "$CONT" ] || [ -n "$RESUME" ] || CONT=$(tget continues)   # resume = the SAME session, no predecessor step
-  TCOLOR_OVR=$(tget color)   # optional `color:` override for the pane colour (lib/pane-color.sh)
+  TCOLOR_OVR=$(tget color)   # optional `color:` override for the pane colour (cos_pane_color)
   [ "$(tget light)" != true ] || LIGHT=1   # read-only task: may start while load says OFFLOAD
   if [ "${#DEPS[@]}" = 0 ]; then while IFS= read -r d; do [ -z "$d" ] || DEPS+=("$d"); done < <(cos_python -c 'import json,sys;[print(x) for x in json.loads(sys.argv[1] or "[]")]' "$(tget depends_on_missions)"); fi
   TST=$(tget status); TTO=$(tget to)
@@ -99,7 +100,7 @@ if [ -n "$TASKF" ]; then
 fi
 [ -n "$NAME" ] || { echo "need --task-file FILE, or --name --dir --charter FILE" >&2; exit 2; }
 # Naming convention — checked before anything else so a bad name never gets half-spawned.
-MACH_LOCAL="${COS_MACHINE_PREFIX:-m}"
+MACH_LOCAL="${COS_MACHINE_PREFIX:-a}"
 MACH_REMOTE="${COS_REMOTE_MACHINE_PREFIX:-}"
 if [ "$REMOTE" = 1 ] && [ -z "$MACH_REMOTE" ]; then
   echo "COS_REMOTE_MACHINE_PREFIX is unset — remote runner add-on not configured (set it in config.env via /agent-ops:init)" >&2; exit 2
@@ -493,7 +494,7 @@ RULES_PROMPT="RULEBOOK: $WR_SAFE (role: $ROLE). Each line below is a rule in sho
 RULES_PROMPT="$RULES_PROMPT ROLES (§ Roles): you are a $ROLE worker; stay inside your task."
 RULES_PROMPT="$RULES_PROMPT ASKS (§ Asks and the NEEDS YOU banner): ask the owner only via the asks: block of your task file; a turn that ends blocked on the owner ends with the NEEDS YOU banner."
 RULES_PROMPT="$RULES_PROMPT AUTONOMY (§ Autonomy): decide two-way doors yourself; ask only for one-way doors."
-RULES_PROMPT="$RULES_PROMPT SPEED (§ Speed and the remote machine): parallel lanes for independent work, batch tool calls; heavy commands on the remote machine when configured; a status line every 30 min."
+RULES_PROMPT="$RULES_PROMPT SPEED (§ Speed and heavy commands): parallel lanes for independent work, batch tool calls; heavy commands may be routed to another machine by a user-layer script (see your user rules); a status line every 30 min."
 RULES_PROMPT="$RULES_PROMPT NO OVERDOING (§ No overdoing): do only what the next step of your goal needs; green stays green."
 [ "$ROLE" != builder ] || RULES_PROMPT="$RULES_PROMPT TEST TIERS (§ Test tiers): one quick proof per change is the default; full regression only where the section says."
 RULES_PROMPT="$RULES_PROMPT SUBAGENTS (§ Subagents): every brief has a wall-clock budget and returns partial at it; subagents never wait on deploys or locks."
@@ -516,10 +517,13 @@ DISALLOW_FLAG=; [ -z "$WORKER_DISALLOWED" ] || DISALLOW_FLAG="--disallowedTools 
 EXTRA_FLAGS="${COS_WORKER_CLAUDE_FLAGS:-}"; [ -z "$EXTRA_FLAGS" ] || EXTRA_FLAGS="$EXTRA_FLAGS "
 CLAUDE_BIN="${COS_CLAUDE_BIN:-claude}"
 EXTRA_PROMPT="${COS_WORKER_PROMPT_EXTRA:-}"; [ -z "$EXTRA_PROMPT" ] || EXTRA_PROMPT="$EXTRA_PROMPT "
+# User layer: the user's own standing rules live outside the plugin in $COS_USER_DIR/rules.md (cos-env.sh).
+[ ! -f "$COS_USER_DIR/rules.md" ] || EXTRA_PROMPT="${EXTRA_PROMPT}User rules: read $(devault "$COS_USER_DIR/rules.md") in turn 1. "
 
-# Pane colour (cmux add-on): task `color:` override, else COS_PANE_COLORS goal-prefix map (addons/lib/pane-color.sh).
+# Pane colour (cmux): task `color:` override, else cos_pane_color from the optional COS_CMUX_HELPERS file (cos-env.sh
+# stubs every pane helper to a no-op when that file is unset, so no helper = plain panes).
 PCOLOR=
-if [ "$REMOTE" = 0 ] && [ "$COS_LAUNCHER" = cmux ]; then . "$HERE/addons/lib/pane-color.sh"; PCOLOR=$(cos_pane_color "$GOAL" "$TCOLOR_OVR"); fi
+if [ "$REMOTE" = 0 ] && [ "$COS_LAUNCHER" = cmux ]; then PCOLOR=$(cos_pane_color "$GOAL" "$TCOLOR_OVR"); fi
 
 if [ "$REMOTE" = 0 ]; then
   LAUNCH="$LAUNCH_DIR/$NAME.sh"
@@ -614,7 +618,7 @@ L
     else dry_goal; echo "DRY-RUN role: $ROLE · first prompt ${#PROMPT} chars"; fi
     case "$COS_LAUNCHER" in
       cmux)
-        if [ -n "$WS" ]; then . "$HERE/addons/lib/cmux-equalize.sh"; GRID_PLAN=; [ "${COS_LAYOUT:-row}" = grid ] && GRID_PLAN=$(cos_grid_plan "$WS")
+        if [ -n "$WS" ]; then GRID_PLAN=; [ "${COS_LAYOUT:-row}" = grid ] && GRID_PLAN=$(cos_grid_plan "$WS")
           if [ -n "$GRID_PLAN" ]; then printf 'DRY-RUN: %q new-split %s --surface %s --workspace %q --command %q --focus false\n' "$CM" "${GRID_PLAN#* }" "${GRID_PLAN% *}" "$WS" "$CMD"
           else printf 'DRY-RUN: %q new-pane --type terminal --workspace %q --direction right --command %q --focus false\n' "$CM" "$WS" "$CMD"; fi
         else printf 'DRY-RUN (no chief workspace, fallback): %q workspace create --name %q --cwd %q --command %q --focus false\n' "$CM" "$NAME" "$DIR" "$CMD"; fi
@@ -635,7 +639,7 @@ L
   chmod +x "$LAUNCH"
   case "$COS_LAUNCHER" in
     cmux)
-      . "$HERE/addons/lib/cmux-equalize.sh"; FSNAP=$(cos_focus_snap)   # focus guard: what the owner sees before any create
+      FSNAP=$(cos_focus_snap)   # focus guard: what the owner sees before any create
       if [ -n "$WS" ]; then
         # Grid decided BEFORE the pane exists; never move a surface afterwards (that wipes scrollback).
         GRID_PLAN=; [ "${COS_LAYOUT:-row}" = grid ] && GRID_PLAN=$(cos_grid_plan "$WS"); out=

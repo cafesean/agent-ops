@@ -17,14 +17,14 @@ Rule: answer each question from its canonical source. If two sources disagree, t
 ## Optional (point the chief at yours in config.env or STATE.md)
 | Question | Typical source |
 |---|---|
-| Project state for a repo | that repo's `STATE.md` / `CLAUDE.md` (`$COS_MONOREPO`, `$COS_REPO_PATHS`) |
+| Project state for a repo | that repo's `STATE.md` / `CLAUDE.md` (`$COS_MONOREPO`) |
 | What happened in a sitting | the repo's session logs (`/agent-ops:session-update`, dir `COS_SESSIONS_DIR`), if you keep them |
 | Why a decision was made | specs / ADRs in the repo |
 | Ticket status | your issue tracker (`$COS_JIRA_BASE`), trusted only where evidence is cited |
 | Servers, hosts | an inventory file (`$COS_INVENTORY`); key names only, never paste values |
 | Standing rules and traps | your memory dir (`$COS_MEMORY_DIR`) |
 | Personal tasks, due dates | your reminders or todo app |
-| Ship status per item (add-on) | `$COS_SHIPPED` via `scripts/addons/where-it-is.sh` |
+| Ship status per item (optional) | a user-layer ship-tracking script named in `$COS_USER_DIR/rules.md` |
 
 ## Traps
 - A CLI proxy or wrapper around `git` or `grep` can return filtered or fabricated output; use `command git` / `command grep` when it matters.
