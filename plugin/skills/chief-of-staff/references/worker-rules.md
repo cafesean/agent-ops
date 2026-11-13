@@ -283,7 +283,9 @@ scrollback. Before it reports a predecessor's fix as live, it checks the CONTENT
 (`git show <sha>:<file> | grep <line>`), never merge-base ancestry: a hold-out cut drops
 the content while ancestry still holds. If the predecessor is still live, it asks the predecessor for its Resume
 Here first. A live predecessor's transcript is never mined; a cold one without Resume Here is mined by a cheap
-subagent (continuity ladder rung 4, SKILL.md).
+subagent (continuity ladder rung 4, SKILL.md). An inherited open DECIDE or APPROVE ask is re-scored with Jev
+before it is shown again: above 0.60 and not one-way, the successor decides and closes it
+(`asks.py close <file> <id> "Jev <value> <conf>, auto"`).
 
 **Steering file.** `steering/<name>.md` holds every turn the user typed in a session, verbatim with time, written
 by `steering-export.py` from the transcript (no LLM). spawn.sh `--continues` and stop.sh `HANDOFF` refresh it; the
