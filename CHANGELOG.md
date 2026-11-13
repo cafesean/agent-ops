@@ -1,5 +1,8 @@
 # Changelog
 
+## Unreleased
+- Chief of staff, cmux launcher: `COS_CMUX_TMUX=1` runs each worker's claude in its own tmux session (named after the worker; `COS_TMUX_SOCKET`, new `COS_TMUX_BIN`) and the cmux pane only attaches, so workers survive quitting or restarting cmux. spawn.sh refuses a name whose session already exists and `--dry-run` prints both steps; `where:` gets a `/tmux:<name>` suffix; stop.sh reads the screen from and kills that session, then closes the pane. Re-opening attach panes after a cmux restart is left to a user-layer script.
+
 ## 0.8.1
 - Config keys are exported when loaded, so python helpers and every python hook see them (hooks/cos-py.sh sources the config; values never printed).
 - `COS_NEEDS_CHECK_CMD` runs as a shell command line like every other `*_CMD` key, so a quoted path with spaces works.

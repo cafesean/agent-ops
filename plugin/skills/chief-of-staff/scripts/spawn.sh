@@ -9,6 +9,15 @@
 #                  exit 2 unless --force). The worker reports under `## Reports` of that file and asks the owner via `asks:`.
 #   Launcher       COS_LAUNCHER (config): print = print the exact claude command + task file path, open nothing;
 #                  tmux = new window in tmux session `agent-ops`; cmux = new pane in the chief's cmux workspace (add-on).
+#   cmux + tmux    COS_CMUX_TMUX=1 (with COS_LAUNCHER=cmux; default 0): claude runs in its own tmux session named NAME
+#                  and the cmux pane only attaches, so the worker survives quitting or restarting cmux. spawn.sh first
+#                  runs `tmux new-session -d -s NAME -c DIR "bash LAUNCH; exec $SHELL -l"` (the chief's CMUX_* pane
+#                  ids are unset inside it, so cmux's own status hooks are not injected), then opens the pane with
+#                  `tmux attach -t '=NAME'`. tmux = $COS_TMUX_BIN (default tmux on PATH) on $COS_TMUX_SOCKET (a name →
+#                  -L, a path → -S; unset = the default server). A session NAME already there → exit 2. where: gets a
+#                  `/tmux:NAME` suffix; stop.sh kills that session. A ⟦CK⟧ typed into the pane reaches claude through
+#                  the attach. After a cmux restart the panes are gone but the sessions live on: re-opening attach panes
+#                  for them is a user-layer script (e.g. `tmux ls` → `cmux new-pane --command "tmux attach -t '=NAME'"`).
 #   --agent NAME   passed through as `claude --agent NAME`.
 #   --dry-run      print the goal, the task file and the launch commands; write nothing, launch nothing.
 #   --no-goal      allow a charter that says `parent goal: none` (PARK risk).
@@ -582,6 +591,19 @@ if [ "$COS_LAUNCHER" = cmux ]; then
   fi
   [ -n "$WS" ] || WS=$(printf '%s\n' "$TREE" | awk -v t="${COS_CMUX_WORKSPACE_TITLE:-chief}" '$0 ~ (" workspace workspace:[0-9]+ \"" t "\"( |$)") {for(i=1;i<=NF;i++) if ($i ~ /^workspace:[0-9]+$/) {print $i; exit}}')
 fi
+# cmux + tmux (COS_CMUX_TMUX=1): claude lives in tmux session NAME; the pane command only attaches.
+CTMUX=0 TSESS_CMD=
+if [ "$COS_LAUNCHER" = cmux ] && [ "${COS_CMUX_TMUX:-0}" = 1 ]; then
+  CTMUX=1
+  if cos_has_tmux; then
+    ! cos_tmux has-session -t "=$NAME" 2>/dev/null \
+      || { echo "refuse: tmux session $NAME already exists${COS_TMUX_SOCKET:+ (socket $COS_TMUX_SOCKET)} — stop it first (stop.sh $NAME) or pick another name" >&2; exit 2; }
+  elif [ "$DRY" = 0 ]; then echo "tmux not found (COS_CMUX_TMUX=1) — install tmux, set COS_TMUX_BIN, or set COS_CMUX_TMUX=0" >&2; exit 1
+  else echo "WARN: tmux not found (COS_CMUX_TMUX=1) — a real spawn would exit 1" >&2; fi
+  TSESS_CMD="unset CMUX_SURFACE_ID CMUX_WORKSPACE_ID CMUX_PANEL_ID CMUX_TAB_ID; bash $(printf '%q' "$LAUNCH"); exec \"\$SHELL\" -l"
+  # quoted '=NAME': cmux types the command into an interactive shell, where a bare =word can expand (zsh)
+  CMD="cd $(printf '%q' "$DIR_SAFE") && $(cos_tmux_cmd) attach -t '=$NAME'; exec \"\$SHELL\" -l"
+fi
 wt_shell_args() {   # one arg per line: the shell Windows Terminal opens for this worker (launch script, then a login shell)
   if [ "${COS_WSL:-0}" = 1 ]; then printf '%s\n' wsl.exe -d "${WSL_DISTRO_NAME:-}" -- bash -lc "bash $(printf '%q' "$LAUNCH") || true && exec bash -l"
   else printf '%s\n' "$( (cygpath -w "$(command -v bash)" 2>/dev/null) || command -v bash)" -lc "bash $(printf '%q' "$LAUNCH") || true && exec bash -l"; fi
@@ -594,11 +616,13 @@ if [ "$DRY" = 1 ]; then
   else dry_goal; echo "DRY-RUN role: $ROLE · first prompt ${#PROMPT} chars"; fi
   case "$COS_LAUNCHER" in
     cmux)
+      [ "$CTMUX" = 0 ] || printf 'DRY-RUN tmux (COS_CMUX_TMUX=1): %s new-session -d -s %q -c %q %q\n' "$(cos_tmux_cmd)" "$NAME" "$DIR" "$TSESS_CMD"
       if [ -n "$WS" ]; then GRID_PLAN=; [ "${COS_LAYOUT:-row}" = grid ] && GRID_PLAN=$(cos_grid_plan "$WS")
         if [ -n "$GRID_PLAN" ]; then printf 'DRY-RUN: %q new-split %s --surface %s --workspace %q --command %q --focus false\n' "$CM" "${GRID_PLAN#* }" "${GRID_PLAN% *}" "$WS" "$CMD"
         else printf 'DRY-RUN: %q new-pane --type terminal --workspace %q --direction right --command %q --focus false\n' "$CM" "$WS" "$CMD"; fi
       else printf 'DRY-RUN (no chief workspace, fallback): %q workspace create --name %q --cwd %q --command %q --focus false\n' "$CM" "$NAME" "$DIR" "$CMD"; fi
-      [ -z "$PCOLOR" ] || printf 'DRY-RUN: then %q send %q to the new pane\n' "$CM" "/color $PCOLOR";;
+      [ -z "$PCOLOR" ] || printf 'DRY-RUN: then %q send %q to the new pane\n' "$CM" "/color $PCOLOR"
+      [ "$CTMUX" = 0 ] || echo "DRY-RUN where: cmux ws<N>/surface:<M>/tmux:$NAME (the pane only attaches; stop.sh kills the session)";;
     wt) printf 'DRY-RUN: %s -w 0 new-tab --title %q %s\n' "$(cos_wt_bin 2>/dev/null || echo wt.exe)" "$NAME" "$(wt_shell_args | tr '\n' ' ')";;
     tmux) printf 'DRY-RUN: tmux%s new-window -d -t %q -n %q -c %q %q\n' "${COS_TMUX_SOCKET:+ (socket $COS_TMUX_SOCKET)}" "$TMUX_SESSION" "$NAME" "$DIR" "$CMD";;
     *) printf 'DRY-RUN print launcher: run in a new terminal:\n  %s\n' "$CMD"
@@ -615,6 +639,9 @@ printf '%s\n' "$LAUNCH_BODY" > "$LAUNCH"
 chmod +x "$LAUNCH"
 case "$COS_LAUNCHER" in
   cmux)
+    if [ "$CTMUX" = 1 ]; then
+      cos_tmux new-session -d -s "$NAME" -c "$DIR" "$TSESS_CMD" || { echo "tmux new-session $NAME failed" >&2; exit 1; }
+    fi
     FSNAP=$(cos_focus_snap)   # focus guard: what the owner sees before any create
     if [ -n "$WS" ]; then
       # Grid decided BEFORE the pane exists; never move a surface afterwards (that wipes scrollback).
@@ -626,7 +653,8 @@ case "$COS_LAUNCHER" in
       printf '%s' "$out" | grep -qE 'surface:[0-9]+' \
         || out=$("$CM" new-pane --type terminal --workspace "$WS" --direction right --command "$CMD" --focus false)
       SURF=$(printf '%s\n' "$out" | grep -oE 'surface:[0-9]+' | head -1)
-      [ -n "$SURF" ] || { echo "cmux new-pane gave no surface: $out" >&2; exit 1; }
+      [ -n "$SURF" ] || { echo "cmux new-pane gave no surface: $out" >&2
+        [ "$CTMUX" = 0 ] || echo "note: the worker still runs in tmux session $NAME — attach: $(cos_tmux_cmd) attach -t '=$NAME'" >&2; exit 1; }
       "$CM" tab-action --action rename --workspace "$WS" --surface "$SURF" --title "$NAME" >/dev/null 2>&1 \
         || echo "WARN: could not rename tab $SURF to $NAME" >&2
       WHERE="cmux ws${WS#workspace:}/$SURF"
@@ -638,9 +666,10 @@ case "$COS_LAUNCHER" in
       echo "WARN: no cmux workspace titled \"${COS_CMUX_WORKSPACE_TITLE:-chief}\" — falling back to a NEW workspace" >&2
       "$CM" workspace create --name "$NAME" --cwd "$DIR" --command "$CMD" --focus false
       WHERE=cmux
-    fi;;
+    fi
+    [ "$CTMUX" = 0 ] || WHERE="$WHERE/tmux:$NAME";;
   tmux)
-    command -v tmux >/dev/null 2>&1 || { echo "tmux not found (COS_LAUNCHER=tmux) — install tmux or set COS_LAUNCHER=print" >&2; exit 1; }
+    cos_has_tmux || { echo "tmux not found (COS_LAUNCHER=tmux) — install tmux or set COS_LAUNCHER=print" >&2; exit 1; }
     cos_tmux has-session -t "$TMUX_SESSION" 2>/dev/null || cos_tmux new-session -d -s "$TMUX_SESSION" -n chief
     cos_tmux new-window -d -t "$TMUX_SESSION" -n "$NAME" -c "$DIR" "$CMD"
     WHERE="tmux $TMUX_SESSION:$NAME";;

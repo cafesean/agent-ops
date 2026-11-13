@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Stop a worker the chief spawned: kill its claude pid, drop its registry file, close its pane/window
 # (task `where:` — `tmux <session>:<name>`, or cmux `ws<N>/surface:<M>`; never the chief's own) and mark the
-# task closed. Only for workers the chief spawned — never the owner's own sessions.
+# task closed. A cmux worker spawned with COS_CMUX_TMUX=1 (where: `…/tmux:NAME`) runs in tmux session NAME and its
+# pane only attaches: stop.sh kills that session (cos_tmux: $COS_TMUX_BIN on $COS_TMUX_SOCKET) and then closes the
+# pane as usual; the subagent gate reads the screen with tmux capture-pane of that session.
+# Only for workers the chief spawned — never the owner's own sessions.
 #   stop.sh NAME [STATUS] [--force] [--dry-run]     STATUS defaults to STOPPED
 #   --dry-run: run every gate and mark the task closed, but kill no pid and close no pane/window.
 # Session-log gate (any STATUS): the task's report since its last STARTED needs a line containing "session:" or
@@ -22,9 +25,9 @@
 #   hooks/worktree-owner.py is still there and not locked with a reason; a dirty one must be committed + pushed first.
 #   Sources: $COS_DIR/.worktrees/NAME (hook registry) + <root>/.git/worktrees/*/cos-owner and
 #   <root>/*/.git/worktrees/*/cos-owner for each root in COS_WORKTREE_ROOTS (colon list, default none). Fails open.
-# Subagent gate: before killing, read the worker's screen (tmux capture-pane for `tmux <target>`, cmux read-screen for
-#   `ws<N>/surface:<M>`, else the cmux surface whose tab title = NAME). Refuse (exit 7) unless --force when the screen
-#   has a running-task line `◯ <text> <elapsed>` (elapsed `3m 11s` or `12s ·`). Footer markers `← N agent(s)` /
+# Subagent gate: before killing, read the worker's screen (tmux capture-pane for `tmux <target>` or `…/tmux:NAME`,
+#   cmux read-screen for `ws<N>/surface:<M>`, else the cmux surface whose tab title = NAME). Refuse (exit 7) unless
+#   --force when the screen has a running-task line `◯ <text> <elapsed>` (elapsed `3m 11s` or `12s ·`). Footer markers `← N agent(s)` /
 #   `· N shell(s)` are ignored (they persist after agents finish). Screen unreadable = WARN and continue.
 # Close: sets the task `status: done|failed|stopped|parked` + a `closed:` stamp, so no live task outlives its worker.
 set -euo pipefail
@@ -174,7 +177,10 @@ subagent_check() {  # subagent_check SCREEN LABEL
 if [[ "$GW" == "wt "* ]]; then :
 elif [[ "$GW" =~ ^tmux\ (.+)$ ]]; then
   TGT="${BASH_REMATCH[1]}"
-  if command -v tmux >/dev/null 2>&1; then subagent_check "$(cos_tmux capture-pane -p -t "$TGT" 2>/dev/null || true)" "tmux pane $TGT"; fi
+  if cos_has_tmux; then subagent_check "$(cos_tmux capture-pane -p -t "$TGT" 2>/dev/null || true)" "tmux pane $TGT"; fi
+elif [[ "$GW" =~ /tmux:([^/[:space:]]+)$ ]]; then
+  TSN="${BASH_REMATCH[1]}"
+  if cos_has_tmux; then subagent_check "$(cos_tmux capture-pane -p -t "=$TSN:" 2>/dev/null || true)" "tmux session $TSN"; fi
 elif [ "$COS_LAUNCHER" = cmux ] && command -v "$CMG" >/dev/null 2>&1; then
   GSURF=; GWS=
   if [[ "$GW" =~ ws([0-9]+)/(surface:[0-9]+) ]]; then GWS="workspace:${BASH_REMATCH[1]}"; GSURF="${BASH_REMATCH[2]}"
@@ -189,12 +195,19 @@ for f in "$HOME"/.claude/sessions/*.json; do
     pid=$(basename "$f" .json); kill -9 "$pid" 2>/dev/null || { [ "$COS_OS" = windows ] && taskkill //PID "$pid" //F >/dev/null 2>&1; } || true; rm -f "$f" "$HOME/.claude/sessions/$pid".*.key; echo "killed pid $pid"
   fi
 done
+# cmux + tmux worker (where: …/tmux:NAME): kill its tmux session first (claude gets SIGHUP), then the pane below.
+TSESS=; [[ "$GW" =~ /tmux:([^/[:space:]]+)$ ]] && TSESS="${BASH_REMATCH[1]}"
+if [ -n "$TSESS" ]; then
+  if [ "$DRY" = 1 ]; then echo "DRY-RUN: would kill tmux session $TSESS ($(cos_tmux_cmd) kill-session -t '=$TSESS')"
+  elif cos_has_tmux && cos_tmux kill-session -t "=$TSESS" 2>/dev/null; then echo "killed tmux session $TSESS"
+  else echo "WARN: no tmux session $TSESS (already gone?)" >&2; fi
+fi
 if [ "$DRY" = 1 ]; then echo "DRY-RUN: would close $NAME's pane/window ($(where_of))"
 elif where_of | grep -qE '^wt '; then
   echo "note: Windows Terminal tab \"$NAME\" stays open (wt.exe cannot close tabs) — close it by hand"
 elif where_of | grep -qE '^tmux '; then
   tw=$(where_of | sed -E 's/^tmux //')
-  command -v tmux >/dev/null 2>&1 && cos_tmux kill-window -t "$tw" 2>/dev/null && echo "closed tmux window $tw" || echo "WARN: no tmux window $tw (already gone?)" >&2
+  cos_has_tmux && cos_tmux kill-window -t "$tw" 2>/dev/null && echo "closed tmux window $tw" || echo "WARN: no tmux window $tw (already gone?)" >&2
 fi
 CM="${COS_CMUX_BIN:-cmux}"   # COS_CMUX_BIN: tests point it at a fake
 if [ "$DRY" = 0 ] && [ "$COS_LAUNCHER" = cmux ] && command -v "$CM" >/dev/null 2>&1; then

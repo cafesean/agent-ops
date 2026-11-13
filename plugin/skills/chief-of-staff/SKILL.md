@@ -200,9 +200,9 @@ Research that must also judge ("is this safe to ship") goes to the strongest mod
 
 ## Working with workers directly
 Workers are ordinary interactive Claude Code sessions. The user can click into any worker's window and talk to it at any time (answer a question, change direction, review its work).
-- Find them: tmux = `tmux attach -t ${COS_TMUX_SESSION:-agent-ops}`, one window per worker named after it; cmux = panes in the chief's workspace; wt = tabs titled with the worker name.
+- Find them: tmux = `tmux attach -t ${COS_TMUX_SESSION:-agent-ops}`, one window per worker named after it; cmux = panes in the chief's workspace (with `COS_CMUX_TMUX=1` each pane only attaches to a tmux session named after the worker, so workers survive a cmux quit; a user-layer script can re-open attach panes for the live sessions); wt = tabs titled with the worker name.
 - The worker prompt tells it to follow direct direction and add a one-line note under `## Reports`. The task file stays the record: read it, never the pane.
-- Closing a worker's window or pane kills that worker; use `stop.sh` to end one cleanly.
+- Closing a worker's window or pane kills that worker (with `COS_CMUX_TMUX=1` it only detaches); use `stop.sh` to end one cleanly.
 - `COS_LAUNCHER=print` is a manual fallback: it only prints the `claude` command; the sweep and queue cannot start workers.
 
 ## Tokens and sessions — short rules
@@ -267,7 +267,7 @@ Each is off by default; core never needs one.
 | Setting | Does |
 |---|---|
 | Focus-aware mode (`COS_ADHD_MODE=1`) | One screen, answer first, novelty guard: `references/addons/adhd.md` |
-| cmux launcher (`COS_LAUNCHER=cmux`) | Workers open as panes in the chief's workspace; layout/colour helpers come from `COS_CMUX_HELPERS` when set (`references/comms.md` → *Panes*) |
+| cmux launcher (`COS_LAUNCHER=cmux`) | Workers open as panes in the chief's workspace; layout/colour helpers come from `COS_CMUX_HELPERS` when set (`references/comms.md` → *Panes*). `COS_CMUX_TMUX=1`: claude runs in its own tmux session (`COS_TMUX_SOCKET`, `COS_TMUX_BIN`) and the pane only attaches; `where:` ends `/tmux:<name>` and `stop.sh` kills the session |
 | Push alerts (`COS_NOTIFY_CMD`) | `next.sh --alert` text on stdin to your notifier; an external scheduler (cron, launchd, a scheduler agent) runs `next.sh --alert` or a headless sweep |
 
 Per-worker environment (a different config dir, a proxy, credentials from your own store) is generic: set `COS_SPAWN_ENV_CMD` to a command that prints `KEY=value` lines; spawn.sh exports them into that worker's launch script only.

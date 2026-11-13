@@ -24,7 +24,7 @@ COS_OUTSTANDING="${COS_OUTSTANDING:-$COS_DIR/Outstanding.md}"
 # User layer: the user's own rules.md, bin/ scripts and README, outside any plugin (survives plugin updates).
 COS_USER_DIR="${COS_USER_DIR:-$COS_DIR/user}"
 if [ -z "${COS_LAUNCHER:-}" ]; then   # tmux if installed, else Windows Terminal on Windows/WSL, else print
-  if command -v tmux >/dev/null 2>&1; then COS_LAUNCHER=tmux
+  if command -v "${COS_TMUX_BIN:-tmux}" >/dev/null 2>&1; then COS_LAUNCHER=tmux
   elif cos_wt_bin >/dev/null 2>&1; then COS_LAUNCHER=wt
   else COS_LAUNCHER=print; fi
 fi
@@ -50,13 +50,23 @@ cos_own() {   # cos_own NAME → 0 when this machine may write NAME's task file
     *) [ "$COS_PREFIX" = "$COS_HOST_PREFIX" ];;
   esac
 }
-cos_tmux() {  # tmux on the agent-ops server: COS_TMUX_SOCKET = socket name (-L) or path (-S); unset = default server
+cos_tmux() {  # tmux on the agent-ops server: COS_TMUX_SOCKET = socket name (-L) or path (-S); unset = default server.
+  # COS_TMUX_BIN = the tmux binary (default: tmux on PATH).
   case "${COS_TMUX_SOCKET:-}" in
-    "") command tmux "$@";;
-    */*) command tmux -S "$COS_TMUX_SOCKET" "$@";;
-    *) command tmux -L "$COS_TMUX_SOCKET" "$@";;
+    "") command "${COS_TMUX_BIN:-tmux}" "$@";;
+    */*) command "${COS_TMUX_BIN:-tmux}" -S "$COS_TMUX_SOCKET" "$@";;
+    *) command "${COS_TMUX_BIN:-tmux}" -L "$COS_TMUX_SOCKET" "$@";;
   esac
 }
+cos_tmux_cmd() {  # the same tmux call as cos_tmux, as a shell-quoted prefix for a command string another shell runs
+  local b; b=$(printf '%q' "${COS_TMUX_BIN:-tmux}")
+  case "${COS_TMUX_SOCKET:-}" in
+    "") printf '%s' "$b";;
+    */*) printf '%s -S %s' "$b" "$(printf '%q' "$COS_TMUX_SOCKET")";;
+    *) printf '%s -L %s' "$b" "$(printf '%q' "$COS_TMUX_SOCKET")";;
+  esac
+}
+cos_has_tmux() { command -v "${COS_TMUX_BIN:-tmux}" >/dev/null 2>&1; }
 cos_mtime() {  # cos_mtime FILE → mtime epoch seconds (GNU stat -c, then BSD stat -f)
   stat -c %Y "$1" 2>/dev/null || stat -f %m "$1" 2>/dev/null || echo 0
 }

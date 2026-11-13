@@ -86,7 +86,7 @@ PY
 )
 CM="${COS_CMUX_BIN:-cmux}"   # COS_CMUX_BIN: tests point it at a fake
 ping() {  # ping WS SURF — tmux window target, or cmux workspace/surface
-  if [ "$1" = tmux ]; then command -v tmux >/dev/null 2>&1 && cos_tmux send-keys -t "$2" '⟦CK⟧' Enter
+  if [ "$1" = tmux ]; then cos_has_tmux && cos_tmux send-keys -t "$2" '⟦CK⟧' Enter
   else command -v "$CM" >/dev/null 2>&1 && "$CM" send --workspace "$1" --surface "$2" '⟦CK⟧\r' >/dev/null 2>&1; fi
 }
 n=0 p=0
